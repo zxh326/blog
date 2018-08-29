@@ -31,7 +31,8 @@ install:
 - yarn add hexo-generator-feed
 - yarn add hexo-generator-json-content
 # 当 Travis 文件缓存不存在时，从 Gitee 私有仓库 clone 主题
-- git clone https://github.com/zxh326/hexo-theme-icarus.git themes/icarus
+- if [ ! -d "themes/seventeen" ]; then git clone https://github.com/zxh326/hexo-theme-icarus.git themes/icarus; fi
+# - git clone https://github.com/zxh326/hexo-theme-icarus.git themes/icarus
 
 script:
 # 生成静态页面
