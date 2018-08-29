@@ -1,0 +1,98 @@
+# Menus
+menu:
+  首页: /
+  归档: /archives
+  分类: /categories
+  标签: /tags
+  关于: /about
+
+# Customize
+customize:
+    logo:
+        enabled: true
+        width: 40
+        height: 40
+        url: /logo.png
+    profile:
+        enabled: true # Whether to show profile bar
+        avatar: # css/images/avatar.png
+        gravatar: zth_9451@qq.com # Gravatar email address, if you enable Gravatar, your avatar config will be overriden
+        author: zzde
+        author_title: Designer & Programmer
+        location: DaLian, China
+        follow: https://github.com/zxh326/
+    highlight: monokai
+    sidebar: right # sidebar position, options: left, right
+    thumbnail: true # enable posts thumbnail, options: true, false
+    favicon: /favicon.ico # path to favicon
+    social_links:
+        github: https://github.com/zxh326
+        twitter: https://twitter.com/tancolat
+        codepen: http://codepen.io/zthxxx
+        rss: /atom.xml
+    social_link_tooltip: true # enable the social link tooltip, options: true, false
+
+# Scheme
+scheme:
+    style: melan # icarus, melan
+    icarus: 
+    melan:
+        background_images_path: /images/background/
+        background_images_count: # Set melan scheme background images max number.
+            horizontal_img_count: 0 
+            vertical_img_count: 0 
+
+# Widgets
+widgets:
+    - recent_posts
+    - category
+    - tagcloud
+    - links
+
+# Excerpt 
+## Auto creat excerpt with not <!--more-->
+## Enable will truncate auto_excerpt.lines rows in post head to replace excerpt.
+auto_excerpt:
+    enable: true
+    lines: 5
+
+# Search
+search:
+    insight: true # you need to install `hexo-generator-json-content` before using Insight Search
+    swiftype: # enter swiftype install key here
+    baidu: false # you need to disable other search engines to use Baidu search, options: true, false
+
+# Comment
+comment:
+    disqus: # enter disqus shortname here
+    duoshuo: # enter duoshuo shortname here
+    youyan: # enter youyan uid here
+    changyan: # please fill in `appid` and `conf` to enable
+        appid: # changyan APP ID
+        conf: # changyan conf in code
+
+# Share
+share: default # options: jiathis, bdshare, addtoany, default
+
+# Plugins
+plugins:
+    lightgallery: true # options: true, false
+    justifiedgallery: true # options: true, false
+    mathjax: true # options: true, false
+    google_analytics: # enter the tracking ID for your Google Analytics
+    google_site_verification: # enter Google site verification code
+    baidu_analytics: # enter Baidu Analytics hash key
+
+# Miscellaneous
+miscellaneous:
+    open_graph: # see http://ogp.me
+        fb_app_id:
+        fb_admins:
+        twitter_id:
+        google_plus:
+    links:
+        Manjusak (写代码的香港记者): http://manjusaka.itscoder.com/
+        saber酱的抱枕 (Hentai RBQ): https://saber.love/
+        JAMES-PAN (ApsaraDB 里的蒟苣): https://blog.jamespan.me/
+        梦想博客: http://myloveru.cn/
+        AD's Blog (群内大佬 quin 作者): https://imjad.cn/
