@@ -28,6 +28,8 @@ before_install:
 install:
 # 安装 Hexo 及其依赖
 - yarn
+- yarn install hexo-generator-feed
+- yarn install hexo-generator-json-contenty
 # 当 Travis 文件缓存不存在时，从 Gitee 私有仓库 clone 主题
 - git clone https://github.com/zxh326/hexo-theme-icarus.git themes/icarus
 
