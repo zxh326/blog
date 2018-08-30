@@ -1,10 +1,10 @@
 ---
 title: ArchLinux安装与配置
 date: 2017-05-20 22:54:24
-tags: [Arch,linux]
-categories:
-    - linux
-    - arch
+tags: 
+    - Arch
+    - Linux
+categories: 技术
 ---
 
 > A simple, lightweight distribution
@@ -12,7 +12,6 @@ categories:
 > Archlinux有一个强大的wiki，本文依据[官方wiki](https://wiki.archlinux.org/)编写
 > 如有不当之处，请指出！
 
-<!-- more -->
 
 # 准备和磁盘分区
 
@@ -20,6 +19,8 @@ categories:
 *   硬件
     *   一个大于等于4GB的U盘
     *   电脑（很明显）
+    
+<!-- more -->
 *   软件
     *   [Arch linux ISO](https://www.archlinux.org/download/)镜像
     *   如果你对速度有要求的话强烈建议从国内源下载

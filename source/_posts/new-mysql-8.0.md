@@ -1,9 +1,10 @@
 ---
 title: 尝鲜Mysql8.0
 date: 2018-05-04 11:17:21
-tags: [Mysql,linux]
-categories:
-    - linux
+tags: 
+    - Mysql
+    - Linux
+categories: 技术
 ---
 
 > MySQL 8 正式版 8.0.11 已发布，官方表示 MySQL 8 要比 MySQL 5.7 快 2 倍，支持json
