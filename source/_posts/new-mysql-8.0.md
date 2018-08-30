@@ -38,7 +38,7 @@ $ pwd
 ```
 
 ### 安装
-#### 
+
 ```bash
 #安装目录 
 $ mkdir -p /usr/local/mysql   
