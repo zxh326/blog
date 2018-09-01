@@ -22,18 +22,18 @@ travis会帮我处理好之后的事。
 ##  前期准备
 
 * 创建 `github repo`，本文以 [zxh326.github.io](https://github.com/zxh326/zxh326.github.io) 为例
-    * 在你本地博客目录执行以下操作
-    ```shell
-    # 以下操作将会在你的仓库新建一个source防止专门来存放hexo代码，
-    # 建议不要将主题一起提交，或者将主题作为git submoudle来管理
-    # 
-    git init
-    git remote add origin git@github.com:zxh326/zxh326.github.io.git
-    git checkout --orphan source
-    git add .
-    git commit -m "Initial commit"
-    git push origin source:source
-    ```
+在你本地博客目录执行以下操作
+```shell
+# 以下操作将会在你的仓库新建一个source防止专门来存放hexo代码，
+# 建议不要将主题一起提交，或者将主题作为git submoudle来管理
+# 
+git init
+git remote add origin git@github.com:zxh326/zxh326.github.io.git
+git checkout --orphan source
+git add .
+git commit -m "Initial commit"
+git push origin source:source
+```
 * 注册 `travis-ci`，并将你的仓库添加至travis-ci，[travis-ci](https://travis-ci.org/)
 
 ## 生成部署专用密钥
