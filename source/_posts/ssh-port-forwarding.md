@@ -43,7 +43,7 @@ ssh -L 5000:localhost:5000 root@xxxxx
 ```
 ![](https://ww1.sinaimg.cn/large/005YhI8igy1fv76wiys5lj31760asdiv)
 
-另外，-L选项中的目标地址也可以是其他主机的地址。假设远程云主机B2的局域网IP地址为192.168.59.100，则可以这样进行端口转发:
+另外，-L选项中的目标地址也可以是其他主机的地址。
 
 
 
@@ -59,10 +59,36 @@ ssh [-R 远程地址:远程端口:本地地址:本地端口:] [user@]hostname [c
 应用场景：
 本地主机A1运行了一个服务，端口为3000，远程云主机B1需要访问这个服务。
 
-本次事例就是将上面的倒过来即可，即远程做访问，本地做服务
+本次示例就是将上面的倒过来即可，即远程做访问，本地做服务
 
 ![](https://ww1.sinaimg.cn/large/005YhI8igy1fv77522huuj311208iq4x)
 
 ### 远程端口转发
 
-pass
+对于**本地端口转发**和**远程端口转发**，都存在两个一一对应的端口，分别位于SSH的客户端和服务端，而动态端口转发则只是绑定了一个本地端口，而**目标地址:目标端口**则是不固定的。**目标地址:目标端口**是由**发起的请求**决定的，
+比如，请求地址为192.168.1.100:3000，则通过SSH转发的请求地址也是192.168.1.100:3000。
+常常用于科学上网，代理上网等
+
+语法：
+
+```bash
+ssh [-D 本地地址:本地端口] [user@]hostname [command]
+```
+
+这时，通过**动态端口转发**，可以将在本地主机发起的请求，转发到远程主机，而由远程主机去真正地发起请求。
+
+例如将本地代理设置为：
+![](https://ww1.sinaimg.cn/large/005YhI8igy1fv840hv9irj317c11idnf)
+
+之后执行命令
+
+```bash
+ssh -D localhost:1088 root@xxx
+```
+这是本地的所有的网络请求到将转发到1088端口上之后有ssh通过云主机转发到真正的请求地址，如果你的云主机可以访问外网的话，完全可以达到科学上网的目的。
+
+### 参考链接
+
+* [SSH/OpenSSH/PortForwarding](https://help.ubuntu.com/community/SSH/OpenSSH/PortForwarding?highlight=%28%28SSH%7COpenSSH%7CPortForwarding%29%29)
+
+* [SSH隧道翻墙的原理和实现](http://www.pchou.info/linux/2015/11/01/ssh-tunnel.html)

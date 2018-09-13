@@ -1,6 +1,6 @@
 ---
 title: 使用travis-ci自动部署hexo博客
-date: 2018-09-02 00:18:57
+date: 2018-08-02 00:18:57
 tags:
     - 持续集成
     - github
