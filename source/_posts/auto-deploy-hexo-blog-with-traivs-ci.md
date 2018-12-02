@@ -34,18 +34,27 @@ git add .
 git commit -m "Initial commit"
 git push origin source:source
 ```
-* 注册 `travis-ci`，并将你的仓库添加至travis-ci，[travis-ci](https://travis-ci.org/)
+* 注册 `travis-ci`，并将你的仓库添加至`travis-ci`，[travis-ci](https://travis-ci.org/)
 
-## 生成部署专用密钥
+## 生成部署专用密钥 & 写配置文件
 
-我们有两种方法使travis-ci有操作我们仓库的权限
+我们有两种方法使`travis-ci`有操作我们仓库的权限
+
 * 申请一个GitHub的 Personal access tokens，配合 Travis 的环境变量配置就可以拿到 push 权限了
+
 * 利用travis-ci生成加密的专用部署密钥
 
-简单的说下区别，
-第一种申请的token是可以操作仓库里所有仓库的，包括私有仓库，但这种token是直接存在travis服务里的 申请到之后可以前往对应项目-setting 设置环境变量。相信travis的话 相对来说比较安全。并且github可以以很方便的对token进行权限管理 可以前往[github token](https://github.com/settings/tokens/new)申请 
+简单的说下区别:
+第一种 申请的 `token`默认是可以操作仓库里所有仓库的，包括私有仓库，`github`可以以很方便的对`token`进行权限管理，
+你可以选择明文放在travis与项目相关的环境变量或者通过官方工具加密此token。
 
-第二种 是生成一对ssh密钥对，之后利用travis 利用 openssl aes-256-cbc 加密。比较靠谱，不嫌麻烦的话推荐使用这种。
+第二种 是生成一对ssh密钥对，之后利用`travis` 利用 `openssl aes-256-cbc` 加密。
+如果你另`同时部署到vps`的话使用这种。
+
+
+### 第一种：使用github提供的Personal access tokens
+前往[github token](https://github.com/settings/tokens/new)申请
+注意做好权限管理
 
 第二种的使用方法，第一种直接申请token，放到traivs的环境变量即可，跳过这步
 * 首先，新生成一个 ssh 密钥对（不要嫌麻烦直接把你机器上的秘钥拿去用了，太危险）：
@@ -158,3 +167,6 @@ git push origin master:master --force --quiet
 
 ## 提交试试
 将所有的改动提交至github，注意确保仓库有master分支
+
+[Gist](https://gist.github.com/zxh326/421407e3e14d78a618d69462244bbdfc.js)
+<script src="https://gist.github.com/zxh326/421407e3e14d78a618d69462244bbdfc.js"></script>
