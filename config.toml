@@ -1,0 +1,75 @@
+baseURL = "https://zzde.me/"
+languageCode = "en-us"
+title = "Zzde's blog"
+theme = "hermit"
+googleAnalytics = "UA-162352798-1"
+enableRobotsTXT = true
+enableEmoji = true
+disqusShortname = "zzde"
+paginate = 5
+rssLimit = 20
+hasCJKLanguage = true
+pygmentsCodefences = true
+pygmentsUseClasses  = true
+pygmentsCodefencesGuessSyntax = true
+pygmentsStyle = "dracula"
+
+[params]
+  dateform        = "Jan 2, 2006"
+  dateformShort   = "Jan 2"
+  dateformNum     = "2006-01-02"
+  dateformNumTime = "2006-01-02 15:04"
+
+  # Metadata mostly used in document's head
+  # description = ""
+  # images = [""]
+  themeColor = "#494f5c"
+
+  moreMeta = true
+  showMenuLanguageChooser = true
+  showAuthorInfo = true
+  toc = true
+  photoswipe = true
+
+  # homeSubtitle = "A minimal and fast theme for Hugo."
+  footerCopyright = ' &#183; <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0</a>'
+  # bgImg = ""  # Homepage background-image URL
+
+  # Prefix of link to the git commit detail page. GitInfo must be enabled.
+  # gitUrl = "https://github.com/username/repository/commit/"
+
+  # Toggling this option needs to rebuild SCSS, requires Hugo extended version
+  justifyContent = false  # Set "text-align: justify" to `.content`.
+
+  relatedPosts = false  # Add a related content section to all single posts page
+
+  code_copy_button = true # Turn on/off the code-copy-button for code-fields
+  
+  # Add custom css
+  customCSS = ["css/custom.scss", "css/style.scss"]
+
+  # Social Icons
+  # Check https://github.com/Track3/hermit#social-icons for more info.
+  [[params.social]]
+    name = "twitter"
+    url = "https://twitter.com/m_zzde"
+
+  [[params.social]]
+    name = "instagram"
+    url = "https://instagram.com/zzde.me"
+
+  [[params.social]]
+    name = "github"
+    url = "https://github.com/zxh326"
+
+[menu]
+
+  [[menu.main]]
+    name = "Posts"
+    url = "posts/"
+    weight = 10
+
+  [[menu.main]]
+    name = "About"
+    url = "about-hugo/"
+    weight = 20
