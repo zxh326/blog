@@ -1,0 +1,1385 @@
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on Zzde's blog</title><link>https://zzde.me/posts/</link><description>Recent content in Posts on Zzde's blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Tue, 31 Dec 2019 23:59:59 +0800</lastBuildDate><atom:link href="https://zzde.me/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Things I Don’t Know as of 2018</title><link>https://zzde.me/posts/things-i-dont-know-as-of-2018/</link><pubDate>Tue, 31 Dec 2019 23:59:59 +0800</pubDate><guid>https://zzde.me/posts/things-i-dont-know-as-of-2018/</guid><description>I dont't know anything.</description><content type="html">&lt;p>I dont't know anything.&lt;/p></content></item><item><title>[转]反向代理层绝不能替代DNS轮询</title><link>https://zzde.me/posts/reverse-proxy-layer-must-not-replace-dns-polling/</link><pubDate>Mon, 02 Dec 2019 12:34:17 +0800</pubDate><guid>https://zzde.me/posts/reverse-proxy-layer-must-not-replace-dns-polling/</guid><description>&lt;p>原创： 58沈剑
+今天
+有朋友问我，DNS轮询是不是过时的技术了？有了反向代理层（Nginx、LVS、F5等），是不是就不需要DNS轮询了？
+然而，反向代理层绝不能替代DNS轮询！&lt;/p>
+&lt;h3 id="反向代理层有什么用架构实现时要注意什么">反向代理层有什么用？架构实现时要注意什么？&lt;/h3>
+&lt;ul>
+&lt;li>
+&lt;p>&lt;strong>作为服务端统一入口&lt;/strong>，屏蔽后端WEB集群细节，代表整个WEB集群；
+&lt;em>画外音：这就是为啥它叫反向代理&lt;/em>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>保证WEB集群的扩展性&lt;/strong>，Nginx后端可随时加WEB实例；&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>实施负载均衡&lt;/strong>，反向代理层会将请求均匀分发给后端WEB集群的每一个实例；&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>保证WEB集群的高可用&lt;/strong>，任何一个WEB实例挂了，服务都不受影响；&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>注意自身高可用&lt;/strong>，防止一台Nginx挂了，服务端统一入口受影响；&lt;/p>
+&lt;/li>
+&lt;/ul></description><content type="html"><![CDATA[<p>原创： 58沈剑
+今天
+有朋友问我，DNS轮询是不是过时的技术了？有了反向代理层（Nginx、LVS、F5等），是不是就不需要DNS轮询了？
+然而，反向代理层绝不能替代DNS轮询！</p>
+<h3 id="反向代理层有什么用架构实现时要注意什么">反向代理层有什么用？架构实现时要注意什么？</h3>
+<ul>
+<li>
+<p><strong>作为服务端统一入口</strong>，屏蔽后端WEB集群细节，代表整个WEB集群；
+<em>画外音：这就是为啥它叫反向代理</em></p>
+</li>
+<li>
+<p><strong>保证WEB集群的扩展性</strong>，Nginx后端可随时加WEB实例；</p>
+</li>
+<li>
+<p><strong>实施负载均衡</strong>，反向代理层会将请求均匀分发给后端WEB集群的每一个实例；</p>
+</li>
+<li>
+<p><strong>保证WEB集群的高可用</strong>，任何一个WEB实例挂了，服务都不受影响；</p>
+</li>
+<li>
+<p><strong>注意自身高可用</strong>，防止一台Nginx挂了，服务端统一入口受影响；</p>
+</li>
+</ul>
+<h3 id="反向代理层还存在啥问题">反向代理层还存在啥问题？</h3>
+<p>反向代理层自身的扩展性问题并没有得到很好的解决，例如当Nginx成为系统瓶颈的时候，无法扩容。</p>
+<h3 id="dns轮询如何解决反向代理层的扩展性问题">DNS轮询如何解决反向代理层的扩展性问题？</h3>
+<p>通过在DNS-server上对一个域名设置多个IP解析，能够增加入口Nginx实例个数，起到水平扩容的作用，解决反向代理层的扩展性问题。
+因此，反向代理和DNS轮询并不是互斥的技术，however，这里详细展开讲一下接入层的架构渐进历程。</p>
+<h3 id="裸奔时代单机架构">裸奔时代单机架构</h3>
+<p><img src="/images/640.webp" alt="">
+裸奔时代的架构图如上：</p>
+<p>优点：</p>
+<ul>
+<li>浏览器通过DNS-server，域名解析到ip；</li>
+<li>浏览器通过ip访问web-server；</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>非高可用，web-server挂了整个系统就挂了；</li>
+<li>扩展性差，当吞吐量达到web-server上限时，无法扩容；
+<em>画外音：单机不涉及负载均衡问题。</em></li>
+</ul>
+<h3 id="简易扩容方案dns轮询">简易扩容方案——DNS轮询</h3>
+<p>假设tomcat的吞吐量是1000次每秒，当系统总吞吐量达到3000时，如何扩容是首先要解决的问题，DNS轮询是一个很容易想到的方案。
+<em>画外音：DNS轮询解决扩展性问题。</em></p>
+<p><img src="/images/641.webp" alt="">
+此时的架构图如上：</p>
+<ul>
+<li>多部署几份web-server，1个tomcat抗1000，部署3个tomcat就能抗3000；</li>
+<li>在DNS-server层面，域名每次解析到不同的ip；</li>
+</ul>
+<p>优点：</p>
+<ul>
+<li><strong>零成本</strong>：在DNS-server上多配几个ip即可，功能也不收费；</li>
+<li><strong>部署简单</strong>：多部署几个web-server即可，原系统架构不需要做任何改造；</li>
+<li><strong>负载均衡</strong>：变成了多机，负载也是均衡的；</li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li>
+<p><strong>非高可用</strong>：DNS-server只负责域名解析ip，这个ip对应的服务是否可用，DNS-server是不保证的，假设有一个web-server
+挂了，部分服务会受到影响；</p>
+</li>
+<li>
+<p><strong>扩容非实时</strong>：DNS解析有一个生效周期；</p>
+</li>
+<li>
+<p><strong>暴露了太多的外网ip</strong>；</p>
+</li>
+</ul>
+<h3 id="简易扩容方案反向代理nginx">简易扩容方案——反向代理Nginx</h3>
+<p>tomcat的性能较差，但Nginx作为反向代理的性能就强很多，假设线上跑到1w，就比tomcat高了10倍，可以利用这个特性来做扩容。
+<img src="/images/642.webp" alt="">
+此时的架构图如上：</p>
+<ul>
+<li>站点层与浏览器层之间加入了一个反向代理层，利用高性能的Nginx来做反向代理；</li>
+<li>Nginx将http请求分发给后端多个web-server；</li>
+</ul>
+<p>优点：</p>
+<ul>
+<li>DNS-server不需要动；</li>
+<li><strong>负载均衡</strong>：通过Nginx来保证；</li>
+<li><strong>只暴露一个外网ip</strong>，Nginx-&gt;tomcat之间使用内网访问；</li>
+<li><strong>扩容实时</strong>：Nginx内部可控，随时增加web-server随时实时扩容；</li>
+<li><strong>能够保证站点层的可用性</strong>：任何一台tomcat挂了，Nginx可以将流量迁移到其他tomcat；
+<em>画外音：反向代理，能够更实时，更方便的扩容了。</em></li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li><strong>时延增加+架构更复杂了</strong>：中间多加了一个反向代理层；</li>
+<li><strong>反向代理层成了单点</strong>，非高可用：tomcat挂了不影响服务，Nginx挂了怎么办？</li>
+</ul>
+<h3 id="高可用方案keepalived">高可用方案——keepalived</h3>
+<p>为了解决高可用的问题，keepalived出场了。
+<img src="/images/643.webp" alt=""></p>
+<ul>
+<li>做两台Nginx组成一个集群，分别部署上keepalived，设置成相同的虚IP，保证Nginx的高可用；</li>
+<li>当一台Nginx挂了，keepalived能够探测到，并将流量自动迁移到另一台Nginx上，整个过程对调用方透明；</li>
+</ul>
+<p><img src="/images/644.webp" alt=""></p>
+<p>优点：</p>
+<ul>
+<li>解决了高可用的问题；
+<em>画外音：反向代理的高可用也解决了。</em></li>
+</ul>
+<p>缺点：</p>
+<ul>
+<li><strong>资源利用率只有50%</strong>；</li>
+<li>Nginx仍然是接入单点，如果接入吞吐量超过的Nginx的性能上限怎么办，例如qps达到了50000咧？</li>
+</ul>
+<h3 id="scale-up扩容方案lvsf5">scale up扩容方案——lvs/f5</h3>
+<p>Nginx是应用软件，性能比tomcat好，但总有个上限，超出了上限，还是扛不住。
+lvs就不一样了，它实施在操作系统层面；f5的性能又更好了，它实施在硬件层面；它们性能比Nginx好很多，例如每秒可以抗10w，这样可以利用他们来扩容，常见的架构图如下：
+<img src="/images/645.webp" alt=""></p>
+<ul>
+<li>如果通过Nginx可以扩展多个tomcat一样，可以通过lvs来扩展多个Nginx；</li>
+<li>通过keepalived+VIP的方案可以保证可用性；
+99.9999%的公司到这一步基本就结束了，解决了接入层高可用、扩展性、负载均衡的问题。</li>
+</ul>
+<p><em>画外音：上游再加一层扩充性能。</em></p>
+<p><strong>完美了嘛，还有什么潜在问题？</strong>
+好吧，不管是使用lvs还是f5，这些都是scale up的方案，根本上，lvs/f5还是会有性能上限，假设每秒能处理10w的请求，一天也只能处理80亿的请求（10w秒吞吐量*8w秒），那万一系统的日PV超过80亿怎么办呢？</p>
+<h3 id="scale-out扩容方案dns轮询">scale out扩容方案——DNS轮询</h3>
+<p>如之前文章所述，水平扩展，才是解决性能问题的根本方案，能够通过加机器扩充性能的方案才具备最好的扩展性。
+facebook，google，baidu的PV是不是超过80亿呢，它们的域名只对应一个ip么，终点又是起点，还是得通过DNS轮询来进行扩容。
+<em>画外音：DNS轮询解决扩展性问题。</em>
+<img src="/images/646.webp" alt=""></p>
+<ul>
+<li>通过DNS轮询来线性扩展入口lvs层的性能；</li>
+<li>通过keepalived来保证高可用；</li>
+<li>通过lvs来扩展多个Nginx；</li>
+<li>通过Nginx来做负载均衡，业务七层路由；</li>
+</ul>
+<h3 id="总结">总结</h3>
+<p>稍微做一个简要的总结：</p>
+<ul>
+<li>接入层架构要考虑的问题域为：<strong>高可用、扩展性、反向代理、负载均衡</strong>；</li>
+<li>Nginx、keepalived、lvs、f5可以很好的解决高可用、扩展性、反向代理、负载均衡的问题；</li>
+<li>水平扩展<strong>scale out是解决扩展性问题的根本方案</strong>，DNS轮询是不能完全被Nginx/lvs/f5所替代的；
+希望大家有收获。
+​</li>
+</ul>]]></content></item><item><title>如何优雅的关闭go Channel</title><link>https://zzde.me/posts/how-to-close-channels-in-golang-elegantly/</link><pubDate>Wed, 13 Mar 2019 20:33:59 +0800</pubDate><guid>https://zzde.me/posts/how-to-close-channels-in-golang-elegantly/</guid><description>本文译自：How To Close Channels in Golang Elegantly。 几天前，我写了一篇文章来说明golang中channel的使用规范。在reddit和HN，那篇</description><content type="html"><![CDATA[<p>本文译自：<a href="http://www.tapirgames.com/blog/golang-channel-closing">How To Close Channels in Golang Elegantly</a>。</p>
+<p>几天前，我写了一篇文章来说明golang中channel的使用规范。在reddit和HN，那篇文章收到了很多赞同，但是我也收到了下面几个关于Go channel设计和规范的批评：</p>
+<p>在不能更改channel状态的情况下，没有简单普遍的方式来检查channel是否已经关闭了
+关闭已经关闭的channel会导致panic，所以在closer(关闭者)不知道channel是否已经关闭的情况下去关闭channel是很危险的
+发送值到已经关闭的channel会导致panic，所以如果sender(发送者)在不知道channel是否已经关闭的情况下去向channel发送值是很危险的</p>
+<p>那些批评看起来都很有道理（实际上并没有）。是的，没有一个内置函数可以检查一个channel是否已经关闭。如果你能确定不会向channel发送任何值，那么也确实需要一个简单的方法来检查channel是否已经关闭：</p>
+<!-- raw HTML omitted -->
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">package</span> <span class="nx">main</span>
+
+<span class="kn">import</span> <span class="s">&#34;fmt&#34;</span>
+
+<span class="kd">type</span> <span class="nx">T</span> <span class="kt">int</span>
+
+<span class="kd">func</span> <span class="nf">IsClosed</span><span class="p">(</span><span class="nx">ch</span> <span class="o">&lt;-</span><span class="kd">chan</span> <span class="nx">T</span><span class="p">)</span> <span class="kt">bool</span> <span class="p">{</span>
+    <span class="k">select</span> <span class="p">{</span>
+    <span class="k">case</span> <span class="o">&lt;-</span><span class="nx">ch</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">true</span>
+    <span class="k">default</span><span class="p">:</span>
+    <span class="p">}</span>
+    
+    <span class="k">return</span> <span class="kc">false</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="nx">T</span><span class="p">)</span>
+    <span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nf">IsClosed</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span><span class="p">)</span> <span class="c1">// false
+</span><span class="c1"></span>    <span class="nb">close</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span>
+    <span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nf">IsClosed</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span><span class="p">)</span> <span class="c1">// true
+</span><span class="c1"></span><span class="p">}</span>
+</code></pre></div><p>上面已经提到了，没有一种适用的方式来检查channel是否已经关闭了。但是，就算有一个简单的 <code>closed(chan T)</code> bool函数来检查channel是否已经关闭，它的用处还是很有限的，就像内置的len函数用来检查缓冲channel中元素数量一样。原因就在于，已经检查过的channel的状态有可能在调用了类似的方法返回之后就修改了，因此返回来的值已经不能够反映刚才检查的channel的当前状态了。</p>
+<p>尽管在调用closed(ch)返回true的情况下停止向channel发送值是可以的，但是如果调用closed(ch)返回false，那么关闭channel或者继续向channel发送值就不安全了（会panic）。</p>
+<h3 id="the-channel-closing-principle">The Channel Closing Principle</h3>
+<p>在使用Go channel的时候，一个适用的原则是不要从接收端关闭channel，也不要关闭有多个并发发送者的channel。换句话说，如果sender(发送者)只是唯一的sender或者是channel最后一个活跃的sender，那么你应该在sender的goroutine关闭channel，从而通知receiver(s)(接收者们)已经没有值可以读了。维持这条原则将保证永远不会发生向一个已经关闭的channel发送值或者关闭一个已经关闭的channel。</p>
+<p>（下面，我们将会称上面的原则为** channel closing principle**</p>
+<h3 id="打破channel-closing-principle的解决方案">打破channel closing principle的解决方案</h3>
+<p>如果你因为某种原因从接收端（receiver side）关闭channel或者在多个发送者中的一个关闭channel，那么你应该使用列在Golang panic/recover Use Cases的函数来安全地发送值到channel中（假设channel的元素类型是T）</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">SafeSend</span><span class="p">(</span><span class="nx">ch</span> <span class="kd">chan</span> <span class="nx">T</span><span class="p">,</span> <span class="nx">value</span> <span class="nx">T</span><span class="p">)</span> <span class="p">(</span><span class="nx">closed</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">defer</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="nb">recover</span><span class="p">(</span><span class="p">)</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+            <span class="c1">// the return result can be altered 
+</span><span class="c1"></span>            <span class="c1">// in a defer function call
+</span><span class="c1"></span>            <span class="nx">closed</span> <span class="p">=</span> <span class="kc">true</span>
+        <span class="p">}</span>
+    <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+    
+    <span class="nx">ch</span> <span class="o">&lt;-</span> <span class="nx">value</span> <span class="c1">// panic if ch is closed
+</span><span class="c1"></span>    <span class="k">return</span> <span class="kc">false</span> <span class="c1">// &lt;=&gt; closed = false; return
+</span><span class="c1"></span><span class="p">}</span>
+</code></pre></div><p>如果channel ch没有被关闭的话，那么这个函数的性能将和ch &lt;- value接近。对于channel关闭的时候，SafeSend函数只会在每个sender goroutine中调用一次，因此程序不会有太大的性能损失。</p>
+<p>同样的想法也可以用在从多个goroutine关闭channel中：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">SafeClose</span><span class="p">(</span><span class="nx">ch</span> <span class="kd">chan</span> <span class="nx">T</span><span class="p">)</span> <span class="p">(</span><span class="nx">justClosed</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
+    <span class="k">defer</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="nb">recover</span><span class="p">(</span><span class="p">)</span> <span class="o">!=</span> <span class="kc">nil</span> <span class="p">{</span>
+            <span class="nx">justClosed</span> <span class="p">=</span> <span class="kc">false</span>
+        <span class="p">}</span>
+    <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+    
+    <span class="c1">// assume ch != nil here.
+</span><span class="c1"></span>    <span class="nb">close</span><span class="p">(</span><span class="nx">ch</span><span class="p">)</span> <span class="c1">// panic if ch is closed
+</span><span class="c1"></span>    <span class="k">return</span> <span class="kc">true</span>
+<span class="p">}</span>
+</code></pre></div><p>很多人喜欢用sync.Once来关闭channel：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">MyChannel</span> <span class="kd">struct</span> <span class="p">{</span>
+    <span class="nx">C</span>    <span class="kd">chan</span> <span class="nx">T</span>
+    <span class="nx">once</span> <span class="nx">sync</span><span class="p">.</span><span class="nx">Once</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">NewMyChannel</span><span class="p">(</span><span class="p">)</span> <span class="o">*</span><span class="nx">MyChannel</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="o">&amp;</span><span class="nx">MyChannel</span><span class="p">{</span><span class="nx">C</span><span class="p">:</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="nx">T</span><span class="p">)</span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">mc</span> <span class="o">*</span><span class="nx">MyChannel</span><span class="p">)</span> <span class="nf">SafeClose</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">mc</span><span class="p">.</span><span class="nx">once</span><span class="p">.</span><span class="nf">Do</span><span class="p">(</span><span class="kd">func</span><span class="p">(</span><span class="p">)</span><span class="p">{</span>
+        <span class="nb">close</span><span class="p">(</span><span class="nx">mc</span><span class="p">.</span><span class="nx">C</span><span class="p">)</span>
+    <span class="p">}</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><p>当然了，我们也可以用sync.Mutex来避免多次关闭channel：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">type</span> <span class="nx">MyChannel</span> <span class="kd">struct</span> <span class="p">{</span>
+    <span class="nx">C</span>      <span class="kd">chan</span> <span class="nx">T</span>
+    <span class="nx">closed</span> <span class="kt">bool</span>
+    <span class="nx">mutex</span>  <span class="nx">sync</span><span class="p">.</span><span class="nx">Mutex</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">NewMyChannel</span><span class="p">(</span><span class="p">)</span> <span class="o">*</span><span class="nx">MyChannel</span> <span class="p">{</span>
+    <span class="k">return</span> <span class="o">&amp;</span><span class="nx">MyChannel</span><span class="p">{</span><span class="nx">C</span><span class="p">:</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="nx">T</span><span class="p">)</span><span class="p">}</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">mc</span> <span class="o">*</span><span class="nx">MyChannel</span><span class="p">)</span> <span class="nf">SafeClose</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">mc</span><span class="p">.</span><span class="nx">mutex</span><span class="p">.</span><span class="nf">Lock</span><span class="p">(</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">!</span><span class="nx">mc</span><span class="p">.</span><span class="nx">closed</span> <span class="p">{</span>
+        <span class="nb">close</span><span class="p">(</span><span class="nx">mc</span><span class="p">.</span><span class="nx">C</span><span class="p">)</span>
+        <span class="nx">mc</span><span class="p">.</span><span class="nx">closed</span> <span class="p">=</span> <span class="kc">true</span>
+    <span class="p">}</span>
+    <span class="nx">mc</span><span class="p">.</span><span class="nx">mutex</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">(</span><span class="p">)</span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="p">(</span><span class="nx">mc</span> <span class="o">*</span><span class="nx">MyChannel</span><span class="p">)</span> <span class="nf">IsClosed</span><span class="p">(</span><span class="p">)</span> <span class="kt">bool</span> <span class="p">{</span>
+    <span class="nx">mc</span><span class="p">.</span><span class="nx">mutex</span><span class="p">.</span><span class="nf">Lock</span><span class="p">(</span><span class="p">)</span>
+    <span class="k">defer</span> <span class="nx">mc</span><span class="p">.</span><span class="nx">mutex</span><span class="p">.</span><span class="nf">Unlock</span><span class="p">(</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nx">mc</span><span class="p">.</span><span class="nx">closed</span>
+<span class="p">}</span>
+</code></pre></div><p>我们应该要理解为什么Go不支持内置SafeSend和SafeClose函数，原因就在于并不推荐从接收端或者多个并发发送端关闭channel。Golang甚至禁止关闭只接收（receive-only）的channel。</p>
+<h3 id="保持-channel-closing-principle-的优雅方案">保持 channel closing principle 的优雅方案</h3>
+<p>上面的SaveSend函数有一个缺点是，在select语句的case关键字后不能作为发送操作被调用（译者注：类似于 case SafeSend(ch, t):）。另外一个缺点是，很多人，包括我自己都觉得上面通过使用panic/recover和sync包的方案不够优雅。针对各种场景，下面介绍不用使用panic/recover和sync包，纯粹是利用channel的解决方案。
+（在下面的例子总，sync.WaitGroup只是用来让例子完整的。它的使用在实践中不一定一直都有用）</p>
+<p>M个receivers，一个sender，sender通过关闭data channel说“不再发送”
+这是最简单的场景了，就只是当sender不想再发送的时候让sender关闭data 来关闭channel：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">package</span> <span class="nx">main</span>
+
+<span class="kn">import</span> <span class="p">(</span>
+    <span class="s">&#34;time&#34;</span>
+    <span class="s">&#34;math/rand&#34;</span>
+    <span class="s">&#34;sync&#34;</span>
+    <span class="s">&#34;log&#34;</span>
+<span class="p">)</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">rand</span><span class="p">.</span><span class="nf">Seed</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">(</span><span class="p">)</span><span class="p">.</span><span class="nf">UnixNano</span><span class="p">(</span><span class="p">)</span><span class="p">)</span>
+    <span class="nx">log</span><span class="p">.</span><span class="nf">SetFlags</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="c1">// ...
+</span><span class="c1"></span>    <span class="kd">const</span> <span class="nx">MaxRandomNumber</span> <span class="p">=</span> <span class="mi">100000</span>
+    <span class="kd">const</span> <span class="nx">NumReceivers</span> <span class="p">=</span> <span class="mi">100</span>
+    
+    <span class="nx">wgReceivers</span> <span class="o">:=</span> <span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{</span><span class="p">}</span>
+    <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">NumReceivers</span><span class="p">)</span>
+    
+    <span class="c1">// ...
+</span><span class="c1"></span>    <span class="nx">dataCh</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+    
+    <span class="c1">// the sender
+</span><span class="c1"></span>    <span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">for</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="nx">value</span> <span class="o">:=</span> <span class="nx">rand</span><span class="p">.</span><span class="nf">Intn</span><span class="p">(</span><span class="nx">MaxRandomNumber</span><span class="p">)</span><span class="p">;</span> <span class="nx">value</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+                <span class="c1">// the only sender can close the channel safely.
+</span><span class="c1"></span>                <span class="nb">close</span><span class="p">(</span><span class="nx">dataCh</span><span class="p">)</span>
+                <span class="k">return</span>
+            <span class="p">}</span> <span class="k">else</span> <span class="p">{</span>            
+                <span class="nx">dataCh</span> <span class="o">&lt;-</span> <span class="nx">value</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+    
+    <span class="c1">// receivers
+</span><span class="c1"></span>    <span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">NumReceivers</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+        <span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">defer</span> <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Done</span><span class="p">(</span><span class="p">)</span>
+            
+            <span class="c1">// receive values until dataCh is closed and
+</span><span class="c1"></span>            <span class="c1">// the value buffer queue of dataCh is empty.
+</span><span class="c1"></span>            <span class="k">for</span> <span class="nx">value</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">dataCh</span> <span class="p">{</span>
+                <span class="nx">log</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">value</span><span class="p">)</span>
+            <span class="p">}</span>
+        <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+    <span class="p">}</span>
+    
+    <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Wait</span><span class="p">(</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><p>一个receiver，N个sender，receiver通过关闭一个额外的signal channel说“请停止发送”
+这种场景比上一个要复杂一点。我们不能让receiver关闭data channel，因为这么做将会打** 破channel closing principle**。但是我们可以让receiver关闭一个额外的signal channel来通知sender停止发送值：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">package</span> <span class="nx">main</span>
+
+<span class="kn">import</span> <span class="p">(</span>
+    <span class="s">&#34;time&#34;</span>
+    <span class="s">&#34;math/rand&#34;</span>
+    <span class="s">&#34;sync&#34;</span>
+    <span class="s">&#34;log&#34;</span>
+<span class="p">)</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">rand</span><span class="p">.</span><span class="nf">Seed</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">(</span><span class="p">)</span><span class="p">.</span><span class="nf">UnixNano</span><span class="p">(</span><span class="p">)</span><span class="p">)</span>
+    <span class="nx">log</span><span class="p">.</span><span class="nf">SetFlags</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="c1">// ...
+</span><span class="c1"></span>    <span class="kd">const</span> <span class="nx">MaxRandomNumber</span> <span class="p">=</span> <span class="mi">100000</span>
+    <span class="kd">const</span> <span class="nx">NumSenders</span> <span class="p">=</span> <span class="mi">1000</span>
+    
+    <span class="nx">wgReceivers</span> <span class="o">:=</span> <span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{</span><span class="p">}</span>
+    <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    
+    <span class="c1">// ...
+</span><span class="c1"></span>    <span class="nx">dataCh</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+    <span class="nx">stopCh</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kd">struct</span><span class="p">{</span><span class="p">}</span><span class="p">)</span>
+        <span class="c1">// stopCh is an additional signal channel.
+</span><span class="c1"></span>        <span class="c1">// Its sender is the receiver of channel dataCh.
+</span><span class="c1"></span>        <span class="c1">// Its reveivers are the senders of channel dataCh.
+</span><span class="c1"></span>    
+    <span class="c1">// senders
+</span><span class="c1"></span>    <span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">NumSenders</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+        <span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">for</span> <span class="p">{</span>
+                <span class="nx">value</span> <span class="o">:=</span> <span class="nx">rand</span><span class="p">.</span><span class="nf">Intn</span><span class="p">(</span><span class="nx">MaxRandomNumber</span><span class="p">)</span>
+                
+                <span class="k">select</span> <span class="p">{</span>
+                <span class="k">case</span> <span class="o">&lt;-</span> <span class="nx">stopCh</span><span class="p">:</span>
+                    <span class="k">return</span>
+                <span class="k">case</span> <span class="nx">dataCh</span> <span class="o">&lt;-</span> <span class="nx">value</span><span class="p">:</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// the receiver
+</span><span class="c1"></span>    <span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="k">defer</span> <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Done</span><span class="p">(</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="nx">value</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">dataCh</span> <span class="p">{</span>
+            <span class="k">if</span> <span class="nx">value</span> <span class="o">==</span> <span class="nx">MaxRandomNumber</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
+                <span class="c1">// the receiver of the dataCh channel is
+</span><span class="c1"></span>                <span class="c1">// also the sender of the stopCh cahnnel.
+</span><span class="c1"></span>                <span class="c1">// It is safe to close the stop channel here.
+</span><span class="c1"></span>                <span class="nb">close</span><span class="p">(</span><span class="nx">stopCh</span><span class="p">)</span>
+                <span class="k">return</span>
+            <span class="p">}</span>
+            
+            <span class="nx">log</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">value</span><span class="p">)</span>
+        <span class="p">}</span>
+    <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+    
+    <span class="c1">// ...
+</span><span class="c1"></span>    <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Wait</span><span class="p">(</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><p>正如注释说的，对于额外的signal channel来说，它的sender是data channel的receiver。这个额外的signal channel被它唯一的sender关闭，遵守了** channel closing principle**。</p>
+<p>M个receiver，N个sender，它们当中任意一个通过通知一个moderator（仲裁者）关闭额外的signal channel来说“让我们结束游戏吧”
+这是最复杂的场景了。我们不能让任意的receivers和senders关闭data channel，也不能让任何一个receivers通过关闭一个额外的signal channel来通知所有的senders和receivers退出游戏。这么做的话会打破** channel closing principle**。但是，我们可以引入一个moderator来关闭一个额外的signal channel。这个例子的一个技巧是怎么通知moderator去关闭额外的signal channel：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">package</span> <span class="nx">main</span>
+
+<span class="kn">import</span> <span class="p">(</span>
+    <span class="s">&#34;time&#34;</span>
+    <span class="s">&#34;math/rand&#34;</span>
+    <span class="s">&#34;sync&#34;</span>
+    <span class="s">&#34;log&#34;</span>
+    <span class="s">&#34;strconv&#34;</span>
+<span class="p">)</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+    <span class="nx">rand</span><span class="p">.</span><span class="nf">Seed</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nf">Now</span><span class="p">(</span><span class="p">)</span><span class="p">.</span><span class="nf">UnixNano</span><span class="p">(</span><span class="p">)</span><span class="p">)</span>
+    <span class="nx">log</span><span class="p">.</span><span class="nf">SetFlags</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="c1">// ...
+</span><span class="c1"></span>    <span class="kd">const</span> <span class="nx">MaxRandomNumber</span> <span class="p">=</span> <span class="mi">100000</span>
+    <span class="kd">const</span> <span class="nx">NumReceivers</span> <span class="p">=</span> <span class="mi">10</span>
+    <span class="kd">const</span> <span class="nx">NumSenders</span> <span class="p">=</span> <span class="mi">1000</span>
+    
+    <span class="nx">wgReceivers</span> <span class="o">:=</span> <span class="nx">sync</span><span class="p">.</span><span class="nx">WaitGroup</span><span class="p">{</span><span class="p">}</span>
+    <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Add</span><span class="p">(</span><span class="nx">NumReceivers</span><span class="p">)</span>
+    
+    <span class="c1">// ...
+</span><span class="c1"></span>    <span class="nx">dataCh</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">100</span><span class="p">)</span>
+    <span class="nx">stopCh</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kd">struct</span><span class="p">{</span><span class="p">}</span><span class="p">)</span>
+        <span class="c1">// stopCh is an additional signal channel.
+</span><span class="c1"></span>        <span class="c1">// Its sender is the moderator goroutine shown below.
+</span><span class="c1"></span>        <span class="c1">// Its reveivers are all senders and receivers of dataCh.
+</span><span class="c1"></span>    <span class="nx">toStop</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">string</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="c1">// the channel toStop is used to notify the moderator
+</span><span class="c1"></span>        <span class="c1">// to close the additional signal channel (stopCh).
+</span><span class="c1"></span>        <span class="c1">// Its senders are any senders and receivers of dataCh.
+</span><span class="c1"></span>        <span class="c1">// Its reveiver is the moderator goroutine shown below.
+</span><span class="c1"></span>    
+    <span class="kd">var</span> <span class="nx">stoppedBy</span> <span class="kt">string</span>
+    
+    <span class="c1">// moderator
+</span><span class="c1"></span>    <span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+        <span class="nx">stoppedBy</span> <span class="p">=</span> <span class="o">&lt;-</span> <span class="nx">toStop</span> <span class="c1">// part of the trick used to notify the moderator
+</span><span class="c1"></span>                              <span class="c1">// to close the additional signal channel.
+</span><span class="c1"></span>        <span class="nb">close</span><span class="p">(</span><span class="nx">stopCh</span><span class="p">)</span>
+    <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+    
+    <span class="c1">// senders
+</span><span class="c1"></span>    <span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">NumSenders</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+        <span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="nx">id</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">for</span> <span class="p">{</span>
+                <span class="nx">value</span> <span class="o">:=</span> <span class="nx">rand</span><span class="p">.</span><span class="nf">Intn</span><span class="p">(</span><span class="nx">MaxRandomNumber</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nx">value</span> <span class="o">==</span> <span class="mi">0</span> <span class="p">{</span>
+                    <span class="c1">// here, a trick is used to notify the moderator
+</span><span class="c1"></span>                    <span class="c1">// to close the additional signal channel.
+</span><span class="c1"></span>                    <span class="k">select</span> <span class="p">{</span>
+                    <span class="k">case</span> <span class="nx">toStop</span> <span class="o">&lt;-</span> <span class="s">&#34;sender#&#34;</span> <span class="o">+</span> <span class="nx">id</span><span class="p">:</span>
+                    <span class="k">default</span><span class="p">:</span>
+                    <span class="p">}</span>
+                    <span class="k">return</span>
+                <span class="p">}</span>
+                
+                <span class="c1">// the first select here is to try to exit the
+</span><span class="c1"></span>                <span class="c1">// goroutine as early as possible.
+</span><span class="c1"></span>                <span class="k">select</span> <span class="p">{</span>
+                <span class="k">case</span> <span class="o">&lt;-</span> <span class="nx">stopCh</span><span class="p">:</span>
+                    <span class="k">return</span>
+                <span class="k">default</span><span class="p">:</span>
+                <span class="p">}</span>
+                
+                <span class="k">select</span> <span class="p">{</span>
+                <span class="k">case</span> <span class="o">&lt;-</span> <span class="nx">stopCh</span><span class="p">:</span>
+                    <span class="k">return</span>
+                <span class="k">case</span> <span class="nx">dataCh</span> <span class="o">&lt;-</span> <span class="nx">value</span><span class="p">:</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span><span class="p">(</span><span class="nx">strconv</span><span class="p">.</span><span class="nf">Itoa</span><span class="p">(</span><span class="nx">i</span><span class="p">)</span><span class="p">)</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// receivers
+</span><span class="c1"></span>    <span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="nx">NumReceivers</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+        <span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="nx">id</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+            <span class="k">defer</span> <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Done</span><span class="p">(</span><span class="p">)</span>
+            
+            <span class="k">for</span> <span class="p">{</span>
+                <span class="c1">// same as senders, the first select here is to 
+</span><span class="c1"></span>                <span class="c1">// try to exit the goroutine as early as possible.
+</span><span class="c1"></span>                <span class="k">select</span> <span class="p">{</span>
+                <span class="k">case</span> <span class="o">&lt;-</span> <span class="nx">stopCh</span><span class="p">:</span>
+                    <span class="k">return</span>
+                <span class="k">default</span><span class="p">:</span>
+                <span class="p">}</span>
+                
+                <span class="k">select</span> <span class="p">{</span>
+                <span class="k">case</span> <span class="o">&lt;-</span> <span class="nx">stopCh</span><span class="p">:</span>
+                    <span class="k">return</span>
+                <span class="k">case</span> <span class="nx">value</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">dataCh</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="nx">value</span> <span class="o">==</span> <span class="nx">MaxRandomNumber</span><span class="o">-</span><span class="mi">1</span> <span class="p">{</span>
+                        <span class="c1">// the same trick is used to notify the moderator 
+</span><span class="c1"></span>                        <span class="c1">// to close the additional signal channel.
+</span><span class="c1"></span>                        <span class="k">select</span> <span class="p">{</span>
+                        <span class="k">case</span> <span class="nx">toStop</span> <span class="o">&lt;-</span> <span class="s">&#34;receiver#&#34;</span> <span class="o">+</span> <span class="nx">id</span><span class="p">:</span>
+                        <span class="k">default</span><span class="p">:</span>
+                        <span class="p">}</span>
+                        <span class="k">return</span>
+                    <span class="p">}</span>
+                    
+                    <span class="nx">log</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">value</span><span class="p">)</span>
+                <span class="p">}</span>
+            <span class="p">}</span>
+        <span class="p">}</span><span class="p">(</span><span class="nx">strconv</span><span class="p">.</span><span class="nf">Itoa</span><span class="p">(</span><span class="nx">i</span><span class="p">)</span><span class="p">)</span>
+    <span class="p">}</span>
+    
+    <span class="c1">// ...
+</span><span class="c1"></span>    <span class="nx">wgReceivers</span><span class="p">.</span><span class="nf">Wait</span><span class="p">(</span><span class="p">)</span>
+    <span class="nx">log</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;stopped by&#34;</span><span class="p">,</span> <span class="nx">stoppedBy</span><span class="p">)</span>
+<span class="p">}</span>
+</code></pre></div><p>在这个例子中，仍然遵守着** channel closing principle**。
+请注意channel toStop的缓冲大小是1.这是为了避免当mederator goroutine 准备好之前第一个通知就已经发送了，导致丢失。</p>
+<h3 id="更多的场景">更多的场景？</h3>
+<p>很多的场景变体是基于上面三种的。举个例子，一个基于最复杂情况的变体可能要求receivers读取buffer channel中剩下所有的值。这应该很容易处理，所有这篇文章也就不提了。
+尽管上面三种场景不能覆盖所有Go channel的使用场景，但它们是最基础的，实践中的大多数场景都可以分类到那三种中。</p>
+<h3 id="结论">结论</h3>
+<p>这里没有一种场景要求你去打破** channel closing principle**。如果你遇到了这种场景，请思考一下你的设计并重写你的代码。
+用Go编程就像在创作艺术。</p>
+<p>thx</p>
+]]></content></item><item><title>Go中的channel详解</title><link>https://zzde.me/posts/go-channel-detail/</link><pubDate>Sun, 13 Jan 2019 15:04:33 +0800</pubDate><guid>https://zzde.me/posts/go-channel-detail/</guid><description>Channel是Go中的一个核心类型，你可以把它看成一个管道，通过它并发核心单元就可以发送或者接收数据进行通讯(communication)</description><content type="html"><![CDATA[<p>Channel是Go中的一个核心类型，你可以把它看成一个管道，通过它并发核心单元就可以发送或者接收数据进行通讯(communication)。</p>
+<p>它的操作符是箭头 <strong>&lt;-</strong> 。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">ch</span> <span class="o">&lt;-</span> <span class="nx">v</span>    <span class="c1">// 发送值v到Channel ch中
+</span><span class="c1"></span>
+<span class="nx">v</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">ch</span>  <span class="c1">// 从Channel ch中接收数据，并将数据赋值给v
+</span></code></pre></div><p>(箭头的指向就是数据的流向)</p>
+<p>就像 map 和 slice 数据类型一样, channel必须先创建再使用:
+<code>ch := make(chan int)</code></p>
+<h3 id="channel类型">Channel类型</h3>
+<hr>
+<p>Channel类型的定义格式如下：</p>
+<div class="highlight"><pre class="chroma"><code class="language-fallback" data-lang="fallback">ChannelType = ( &#34;chan&#34; | &#34;chan&#34; &#34;&lt;-&#34; | &#34;&lt;-&#34; &#34;chan&#34; ) ElementType .
+</code></pre></div><p>它包括三种类型的定义。可选的<code>&lt;-</code>代表channel的方向。如果没有指定方向，那么Channel就是双向的，既可以接收数据，也可以发送数据。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">chan</span> <span class="nx">T</span>          <span class="c1">// 可以接收和发送类型为 T 的数据
+</span><span class="c1"></span>
+<span class="kd">chan</span><span class="o">&lt;-</span> <span class="kt">float64</span>  <span class="c1">// 只可以用来发送 float64 类型的数据
+</span><span class="c1"></span>
+<span class="o">&lt;-</span><span class="kd">chan</span> <span class="kt">int</span>      <span class="c1">// 只可以用来接收 int 类型的数据
+</span></code></pre></div><p><code>&lt;-</code>总是优先和最左边的类型结合。(The &lt;- operator associates with the leftmost chan possible)</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">chan</span><span class="o">&lt;-</span> <span class="kd">chan</span> <span class="kt">int</span>    <span class="c1">// 等价 chan&lt;- (chan int)
+</span><span class="c1"></span>
+<span class="kd">chan</span><span class="o">&lt;-</span> <span class="o">&lt;-</span><span class="kd">chan</span> <span class="kt">int</span>  <span class="c1">// 等价 chan&lt;- (&lt;-chan int)
+</span><span class="c1"></span>
+<span class="o">&lt;-</span><span class="kd">chan</span> <span class="o">&lt;-</span><span class="kd">chan</span> <span class="kt">int</span>  <span class="c1">// 等价 &lt;-chan (&lt;-chan int)
+</span><span class="c1"></span>
+<span class="kd">chan</span> <span class="p">(</span><span class="o">&lt;-</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span>
+</code></pre></div><p>使用<code>make</code>初始化Channel,并且可以设置容量:</p>
+<p><code>make(chan int, 100)</code></p>
+<p>容量(capacity)代表Channel容纳的<strong>最多的元素</strong>的数量，代表Channel的缓存的大小。<br>
+如果没有设置容量，或者容量设置为0, 说明Channel没有缓存，只有sender和receiver都准备好了后它们的通讯(communication)才会发生(Blocking)。
+如果设置了缓存，就有可能不发生阻塞， 只有buffer满了后 send才会阻塞， 而只有缓存空了后receive才会阻塞。一个nil channel不会通信。</p>
+<p>可以通过内建的<code>close</code>方法可以关闭Channel。</p>
+<p>你可以在多个goroutine从/往 一个channel 中 receive/send 数据, 不必考虑额外的同步措施。</p>
+<p>Channel可以作为一个先入先出(FIFO)的队列，接收的数据和发送的数据的顺序是一致的。</p>
+<p>channel的 receive支持 <em>multi-valued assignment</em>，如</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">v</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">ch</span>
+</code></pre></div><p>它可以用来检查Channel是否已经被关闭了。</p>
+<h3 id="send语句">send语句</h3>
+<hr>
+<p>send语句用来往Channel中发送数据， 如<code>ch &lt;- 3</code>。<br>
+它的定义如下:</p>
+<p>SendStmt = Channel &ldquo;&lt;-&rdquo; Expression .</p>
+<p>Channel  = Expression .</p>
+<p>在通讯(communication)开始前channel和expression必选先求值出来(evaluated)，比如下面的(3+4)先计算出7然后再发送给channel。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span>
+
+<span class="k">defer</span> <span class="nb">close</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span>
+
+<span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span> <span class="nx">c</span> <span class="o">&lt;-</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">4</span> <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+
+<span class="nx">i</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">c</span>
+
+<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">i</span><span class="p">)</span>
+</code></pre></div><p>send被执行前(proceed)通讯(communication)一直被阻塞着。如前所言，无缓存的channel只有在receiver准备好后send才被执行。如果有缓存，并且缓存未满，则send会被执行。</p>
+<p>往一个已经被close的channel中继续发送数据会导致<strong>run-time panic</strong>。</p>
+<p>往nil channel中发送数据会一致被阻塞着。</p>
+<h3 id="receive-操作符">receive 操作符</h3>
+<hr>
+<p><code>&lt;-ch</code>用来从channel ch中接收数据，这个表达式会一直被block,直到有数据可以接收。</p>
+<p>从一个nil channel中接收数据会一直被block。</p>
+<p>从一个被close的channel中接收数据不会被阻塞，而是立即返回，接收完已发送的数据后会返回元素类型的零值(zero value)。</p>
+<p>如前所述，你可以使用一个额外的返回参数来检查channel是否关闭。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">x</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">ch</span>
+
+<span class="nx">x</span><span class="p">,</span> <span class="nx">ok</span> <span class="p">=</span> <span class="o">&lt;-</span><span class="nx">ch</span>
+
+<span class="kd">var</span> <span class="nx">x</span><span class="p">,</span> <span class="nx">ok</span> <span class="p">=</span> <span class="o">&lt;-</span><span class="nx">ch</span>
+</code></pre></div><p>如果OK 是false，表明接收的x是产生的零值，这个channel被关闭了或者为空。</p>
+<h3 id="blocking">blocking</h3>
+<hr>
+<p>缺省情况下，发送和接收会一直阻塞着，直到另一方准备好。这种方式可以用来在gororutine中进行同步，而不必使用显示的锁或者条件变量。</p>
+<p>如官方的例子中<code>x, y := &lt;-c, &lt;-c</code>这句会一直等待计算结果发送到channel中。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">import</span> <span class="s">&#34;fmt&#34;</span>
+
+<span class="kd">func</span> <span class="nf">sum</span><span class="p">(</span><span class="nx">s</span> <span class="p">[</span><span class="p">]</span><span class="kt">int</span><span class="p">,</span> <span class="nx">c</span> <span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="nx">sum</span> <span class="o">:=</span> <span class="mi">0</span>
+
+	<span class="k">for</span> <span class="nx">_</span><span class="p">,</span> <span class="nx">v</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">s</span> <span class="p">{</span>
+
+		<span class="nx">sum</span> <span class="o">+=</span> <span class="nx">v</span>
+
+	<span class="p">}</span>
+
+	<span class="nx">c</span> <span class="o">&lt;-</span> <span class="nx">sum</span> <span class="c1">// send sum to c
+</span><span class="c1"></span>
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="nx">s</span> <span class="o">:=</span> <span class="p">[</span><span class="p">]</span><span class="kt">int</span><span class="p">{</span><span class="mi">7</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">8</span><span class="p">,</span> <span class="o">-</span><span class="mi">9</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">0</span><span class="p">}</span>
+
+	<span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span>
+
+	<span class="k">go</span> <span class="nf">sum</span><span class="p">(</span><span class="nx">s</span><span class="p">[</span><span class="p">:</span><span class="nb">len</span><span class="p">(</span><span class="nx">s</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">]</span><span class="p">,</span> <span class="nx">c</span><span class="p">)</span>
+
+	<span class="k">go</span> <span class="nf">sum</span><span class="p">(</span><span class="nx">s</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="nx">s</span><span class="p">)</span><span class="o">/</span><span class="mi">2</span><span class="p">:</span><span class="p">]</span><span class="p">,</span> <span class="nx">c</span><span class="p">)</span>
+
+	<span class="nx">x</span><span class="p">,</span> <span class="nx">y</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">c</span><span class="p">,</span> <span class="o">&lt;-</span><span class="nx">c</span> <span class="c1">// receive from c
+</span><span class="c1"></span>
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">x</span><span class="p">,</span> <span class="nx">y</span><span class="p">,</span> <span class="nx">x</span><span class="o">+</span><span class="nx">y</span><span class="p">)</span>
+
+<span class="p">}</span>
+</code></pre></div><h3 id="buffered-channels">Buffered Channels</h3>
+<hr>
+<p>make的第二个参数指定缓存的大小：<code>ch := make(chan int, 100)</code>。</p>
+<p>通过缓存的使用，可以尽量避免阻塞，提供应用的性能。</p>
+<h3 id="range">Range</h3>
+<p><code>for …… range</code>语句可以处理Channel。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+		<span class="nx">time</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="mi">1</span> <span class="o">*</span> <span class="nx">time</span><span class="p">.</span><span class="nx">Hour</span><span class="p">)</span>
+
+	<span class="p">}</span><span class="p">(</span><span class="p">)</span>
+
+	<span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span>
+
+	<span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+		<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="nx">i</span> <span class="p">=</span> <span class="nx">i</span> <span class="o">+</span> <span class="mi">1</span> <span class="p">{</span>
+
+			<span class="nx">c</span> <span class="o">&lt;-</span> <span class="nx">i</span>
+
+		<span class="p">}</span>
+
+		<span class="nb">close</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span>
+
+	<span class="p">}</span><span class="p">(</span><span class="p">)</span>
+
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">c</span> <span class="p">{</span>
+
+		<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">i</span><span class="p">)</span>
+
+	<span class="p">}</span>
+
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;Finished&#34;</span><span class="p">)</span>
+
+<span class="p">}</span>
+</code></pre></div><p><code>range c</code>产生的迭代值为Channel中发送的值，它会一直迭代直到channel被关闭。上面的例子中如果把<code>close(c)</code>注释掉，程序会一直阻塞在<code>for …… range</code>那一行。</p>
+<h3 id="select">select</h3>
+<hr>
+<p><code>select</code>语句选择一组可能的send操作和receive操作去处理。它类似<code>switch</code>,但是只是用来处理通讯(communication)操作。<br>
+它的<code>case</code>可以是send语句，也可以是receive语句，亦或者<code>default</code>。</p>
+<p><code>receive</code>语句可以将值赋值给一个或者两个变量。它必须是一个receive操作。</p>
+<p>最多允许有一个<code>default case</code>,它可以放在case列表的任何位置，尽管我们大部分会将它放在最后。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">import</span> <span class="s">&#34;fmt&#34;</span>
+
+<span class="kd">func</span> <span class="nf">fibonacci</span><span class="p">(</span><span class="nx">c</span><span class="p">,</span> <span class="nx">quit</span> <span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="nx">x</span><span class="p">,</span> <span class="nx">y</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span>
+
+	<span class="k">for</span> <span class="p">{</span>
+
+		<span class="k">select</span> <span class="p">{</span>
+
+		<span class="k">case</span> <span class="nx">c</span> <span class="o">&lt;-</span> <span class="nx">x</span><span class="p">:</span>
+
+			<span class="nx">x</span><span class="p">,</span> <span class="nx">y</span> <span class="p">=</span> <span class="nx">y</span><span class="p">,</span> <span class="nx">x</span><span class="o">+</span><span class="nx">y</span>
+
+		<span class="k">case</span> <span class="o">&lt;-</span><span class="nx">quit</span><span class="p">:</span>
+
+			<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;quit&#34;</span><span class="p">)</span>
+
+			<span class="k">return</span>
+
+		<span class="p">}</span>
+
+	<span class="p">}</span>
+
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span>
+
+	<span class="nx">quit</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span>
+
+	<span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+		<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="mi">10</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+
+			<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="o">&lt;-</span><span class="nx">c</span><span class="p">)</span>
+
+		<span class="p">}</span>
+
+		<span class="nx">quit</span> <span class="o">&lt;-</span> <span class="mi">0</span>
+
+	<span class="p">}</span><span class="p">(</span><span class="p">)</span>
+
+	<span class="nf">fibonacci</span><span class="p">(</span><span class="nx">c</span><span class="p">,</span> <span class="nx">quit</span><span class="p">)</span>
+
+<span class="p">}</span>
+</code></pre></div><p>如果有同时多个case去处理,比如同时有多个channel可以接收数据，那么Go会伪随机的选择一个case处理(pseudo-random)。如果没有case需要处理，则会选择<code>default</code>去处理，如果<code>default case</code>存在的情况下。如果没有<code>default case</code>，则<code>select</code>语句会阻塞，直到某个case需要处理。</p>
+<p>需要注意的是，nil channel上的操作会一直被阻塞，如果没有default case,只有nil channel的select会一直被阻塞。</p>
+<p><code>select</code>语句和<code>switch</code>语句一样，它不是循环，它只会选择一个case来处理，如果想一直处理channel，你可以在外面加一个无限的for循环：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="k">for</span> <span class="p">{</span>
+
+	<span class="k">select</span> <span class="p">{</span>
+
+	<span class="k">case</span> <span class="nx">c</span> <span class="o">&lt;-</span> <span class="nx">x</span><span class="p">:</span>
+
+		<span class="nx">x</span><span class="p">,</span> <span class="nx">y</span> <span class="p">=</span> <span class="nx">y</span><span class="p">,</span> <span class="nx">x</span><span class="o">+</span><span class="nx">y</span>
+
+	<span class="k">case</span> <span class="o">&lt;-</span><span class="nx">quit</span><span class="p">:</span>
+
+		<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;quit&#34;</span><span class="p">)</span>
+
+		<span class="k">return</span>
+
+	<span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div><h3 id="timeout">timeout</h3>
+<p><code>select</code>有很重要的一个应用就是超时处理。 因为上面我们提到，如果没有case需要处理，select语句就会一直阻塞着。这时候我们可能就需要一个超时操作，用来处理超时的情况。<br>
+下面这个例子我们会在2秒后往channel c1中发送一个数据，但是<code>select</code>设置为1秒超时,因此我们会打印出<code>timeout 1</code>,而不是<code>result 1</code>。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">import</span> <span class="s">&#34;time&#34;</span>
+
+<span class="kn">import</span> <span class="s">&#34;fmt&#34;</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+    <span class="nx">c1</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">string</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+    <span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+        <span class="nx">time</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span>
+
+        <span class="nx">c1</span> <span class="o">&lt;-</span> <span class="s">&#34;result 1&#34;</span>
+
+    <span class="p">}</span><span class="p">(</span><span class="p">)</span>
+
+    <span class="k">select</span> <span class="p">{</span>
+
+    <span class="k">case</span> <span class="nx">res</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">c1</span><span class="p">:</span>
+
+        <span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">res</span><span class="p">)</span>
+
+    <span class="k">case</span> <span class="o">&lt;-</span><span class="nx">time</span><span class="p">.</span><span class="nf">After</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span> <span class="o">*</span> <span class="mi">1</span><span class="p">)</span><span class="p">:</span>
+
+        <span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;timeout 1&#34;</span><span class="p">)</span>
+
+    <span class="p">}</span>
+
+<span class="p">}</span>
+</code></pre></div><p>其实它利用的是<code>time.After</code>方法，它返回一个类型为<code>&lt;-chan Time</code>的单向的channel，在指定的时间发送一个当前时间给返回的channel中。</p>
+<h3 id="timer和ticker">Timer和Ticker</h3>
+<hr>
+<p>我们看一下关于时间的两个Channel。<br>
+timer是一个定时器，代表未来的一个单一事件，你可以告诉timer你要等待多长时间，它提供一个Channel，在将来的那个时间那个Channel提供了一个时间值。下面的例子中第二行会阻塞2秒钟左右的时间，直到时间到了才会继续执行。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">timer1</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">NewTimer</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span> <span class="o">*</span> <span class="mi">2</span><span class="p">)</span>
+
+<span class="o">&lt;-</span><span class="nx">timer1</span><span class="p">.</span><span class="nx">C</span>
+
+<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;Timer 1 expired&#34;</span><span class="p">)</span>
+</code></pre></div><p>当然如果你只是想单纯的等待的话，可以使用<code>time.Sleep</code>来实现。</p>
+<p>你还可以使用<code>timer.Stop</code>来停止计时器。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">timer2</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">NewTimer</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+
+<span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="o">&lt;-</span><span class="nx">timer2</span><span class="p">.</span><span class="nx">C</span>
+
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;Timer 2 expired&#34;</span><span class="p">)</span>
+
+<span class="p">}</span><span class="p">(</span><span class="p">)</span>
+
+<span class="nx">stop2</span> <span class="o">:=</span> <span class="nx">timer2</span><span class="p">.</span><span class="nf">Stop</span><span class="p">(</span><span class="p">)</span>
+
+<span class="k">if</span> <span class="nx">stop2</span> <span class="p">{</span>
+
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;Timer 2 stopped&#34;</span><span class="p">)</span>
+
+<span class="p">}</span>
+</code></pre></div><p><code>ticker</code>是一个定时触发的计时器，它会以一个间隔(interval)往Channel发送一个事件(当前时间)，而Channel的接收者可以以固定的时间间隔从Channel中读取事件。下面的例子中ticker每500毫秒触发一次，你可以观察输出的时间。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">ticker</span> <span class="o">:=</span> <span class="nx">time</span><span class="p">.</span><span class="nf">NewTicker</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Millisecond</span> <span class="o">*</span> <span class="mi">500</span><span class="p">)</span>
+
+<span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="k">for</span> <span class="nx">t</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">ticker</span><span class="p">.</span><span class="nx">C</span> <span class="p">{</span>
+
+		<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="s">&#34;Tick at&#34;</span><span class="p">,</span> <span class="nx">t</span><span class="p">)</span>
+
+	<span class="p">}</span>
+
+<span class="p">}</span><span class="p">(</span><span class="p">)</span>
+</code></pre></div><p>类似timer, ticker也可以通过<code>Stop</code>方法来停止。一旦它停止，接收者不再会从channel中接收数据了。</p>
+<h3 id="close">close</h3>
+<hr>
+<p>内建的close方法可以用来关闭channel。</p>
+<p>总结一下channel关闭后sender的receiver操作。<br>
+如果channel c已经被关闭,继续往它发送数据会导致<code>panic: send on closed channel</code>:</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">import</span> <span class="s">&#34;time&#34;</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="k">go</span> <span class="kd">func</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+		<span class="nx">time</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Hour</span><span class="p">)</span>
+
+	<span class="p">}</span><span class="p">(</span><span class="p">)</span>
+
+	<span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+
+	<span class="nx">c</span> <span class="o">&lt;-</span> <span class="mi">1</span>
+
+	<span class="nx">c</span> <span class="o">&lt;-</span> <span class="mi">2</span>
+
+	<span class="nb">close</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span>
+
+	<span class="nx">c</span> <span class="o">&lt;-</span> <span class="mi">3</span>
+
+<span class="p">}</span>
+</code></pre></div><p>但是从这个关闭的channel中不但可以读取出已发送的数据，还可以不断的读取零值:</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+
+<span class="nx">c</span> <span class="o">&lt;-</span> <span class="mi">1</span>
+
+<span class="nx">c</span> <span class="o">&lt;-</span> <span class="mi">2</span>
+
+<span class="nb">close</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span>
+
+<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="o">&lt;-</span><span class="nx">c</span><span class="p">)</span> <span class="c1">//1
+</span><span class="c1"></span>
+<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="o">&lt;-</span><span class="nx">c</span><span class="p">)</span> <span class="c1">//2
+</span><span class="c1"></span>
+<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="o">&lt;-</span><span class="nx">c</span><span class="p">)</span> <span class="c1">//0
+</span><span class="c1"></span>
+<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="o">&lt;-</span><span class="nx">c</span><span class="p">)</span> <span class="c1">//0
+</span></code></pre></div><p>但是如果通过<code>range</code>读取，channel关闭后for循环会跳出：</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+
+<span class="nx">c</span> <span class="o">&lt;-</span> <span class="mi">1</span>
+
+<span class="nx">c</span> <span class="o">&lt;-</span> <span class="mi">2</span>
+
+<span class="nb">close</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="k">range</span> <span class="nx">c</span> <span class="p">{</span>
+
+	<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">i</span><span class="p">)</span>
+
+<span class="p">}</span>
+</code></pre></div><p>通过<code>i, ok := &lt;-c</code>可以查看Channel的状态，判断值是零值还是正常读取的值。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="nx">c</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="mi">10</span><span class="p">)</span>
+
+<span class="nb">close</span><span class="p">(</span><span class="nx">c</span><span class="p">)</span>
+
+<span class="nx">i</span><span class="p">,</span> <span class="nx">ok</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">c</span>
+
+<span class="nx">fmt</span><span class="p">.</span><span class="nf">Printf</span><span class="p">(</span><span class="s">&#34;%d, %t&#34;</span><span class="p">,</span> <span class="nx">i</span><span class="p">,</span> <span class="nx">ok</span><span class="p">)</span> <span class="c1">//0, false
+</span></code></pre></div><h3 id="同步">同步</h3>
+<hr>
+<p>channel可以用在goroutine之间的同步。<br>
+下面的例子中main goroutine通过done channel等待worker完成任务。 worker做完任务后只需往channel发送一个数据就可以通知main goroutine任务完成。</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="kn">import</span> <span class="p">(</span>
+
+	<span class="s">&#34;fmt&#34;</span>
+
+	<span class="s">&#34;time&#34;</span>
+
+<span class="p">)</span>
+
+<span class="kd">func</span> <span class="nf">worker</span><span class="p">(</span><span class="nx">done</span> <span class="kd">chan</span> <span class="kt">bool</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="nx">time</span><span class="p">.</span><span class="nf">Sleep</span><span class="p">(</span><span class="nx">time</span><span class="p">.</span><span class="nx">Second</span><span class="p">)</span>
+
+	<span class="c1">// 通知任务已完成
+</span><span class="c1"></span>
+	<span class="nx">done</span> <span class="o">&lt;-</span> <span class="kc">true</span>
+
+<span class="p">}</span>
+
+<span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+
+	<span class="nx">done</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">bool</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+
+	<span class="k">go</span> <span class="nf">worker</span><span class="p">(</span><span class="nx">done</span><span class="p">)</span>
+
+	<span class="c1">// 等待任务完成
+</span><span class="c1"></span>
+	<span class="o">&lt;-</span><span class="nx">done</span>
+
+<span class="p">}</span>
+</code></pre></div><h3 id="官方channels例子">官方Channels例子</h3>
+<p>这是从官方摘录的筛选法求素数的 使用channel的经典例子</p>
+<div class="highlight"><pre class="chroma"><code class="language-go" data-lang="go"><span class="c1">// A concurrent prime sieve
+</span><span class="c1"></span><span class="kn">package</span> <span class="nx">main</span>
+
+<span class="kn">import</span> <span class="s">&#34;fmt&#34;</span>
+
+<span class="c1">// Send the sequence 2, 3, 4, ... to channel &#39;ch&#39;.
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">Generate</span><span class="p">(</span><span class="nx">ch</span> <span class="kd">chan</span><span class="o">&lt;-</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">2</span><span class="p">;</span> <span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="nx">ch</span> <span class="o">&lt;-</span> <span class="nx">i</span> <span class="c1">// Send &#39;i&#39; to channel &#39;ch&#39;.
+</span><span class="c1"></span>	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// Copy the values from channel &#39;in&#39; to channel &#39;out&#39;,
+</span><span class="c1"></span><span class="c1">// removing those divisible by &#39;prime&#39;.
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">Filter</span><span class="p">(</span><span class="nx">in</span> <span class="o">&lt;-</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">,</span> <span class="nx">out</span> <span class="kd">chan</span><span class="o">&lt;-</span> <span class="kt">int</span><span class="p">,</span> <span class="nx">prime</span> <span class="kt">int</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">for</span> <span class="p">{</span>
+		<span class="nx">i</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">in</span> <span class="c1">// Receive value from &#39;in&#39;.
+</span><span class="c1"></span>		<span class="k">if</span> <span class="nx">i</span><span class="o">%</span><span class="nx">prime</span> <span class="o">!=</span> <span class="mi">0</span> <span class="p">{</span>
+			<span class="nx">out</span> <span class="o">&lt;-</span> <span class="nx">i</span> <span class="c1">// Send &#39;i&#39; to &#39;out&#39;.
+</span><span class="c1"></span>		<span class="p">}</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="c1">// The prime sieve: Daisy-chain Filter processes.
+</span><span class="c1"></span><span class="kd">func</span> <span class="nf">main</span><span class="p">(</span><span class="p">)</span> <span class="p">{</span>
+	<span class="nx">ch</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span> <span class="c1">// Create a new channel.
+</span><span class="c1"></span>	<span class="k">go</span> <span class="nf">Generate</span><span class="p">(</span><span class="nx">ch</span><span class="p">)</span>      <span class="c1">// Launch Generate goroutine.
+</span><span class="c1"></span>	<span class="k">for</span> <span class="nx">i</span> <span class="o">:=</span> <span class="mi">0</span><span class="p">;</span> <span class="nx">i</span> <span class="p">&lt;</span> <span class="mi">10000</span><span class="p">;</span> <span class="nx">i</span><span class="o">++</span> <span class="p">{</span>
+		<span class="nx">prime</span> <span class="o">:=</span> <span class="o">&lt;-</span><span class="nx">ch</span>
+		<span class="nx">fmt</span><span class="p">.</span><span class="nf">Println</span><span class="p">(</span><span class="nx">prime</span><span class="p">)</span>
+		<span class="nx">ch1</span> <span class="o">:=</span> <span class="nb">make</span><span class="p">(</span><span class="kd">chan</span> <span class="kt">int</span><span class="p">)</span>
+		<span class="k">go</span> <span class="nf">Filter</span><span class="p">(</span><span class="nx">ch</span><span class="p">,</span> <span class="nx">ch1</span><span class="p">,</span> <span class="nx">prime</span><span class="p">)</span>
+		<span class="nx">ch</span> <span class="p">=</span> <span class="nx">ch1</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div><h3 id="参考资料">参考资料</h3>
+<hr>
+<ul>
+<li><a href="https://gobyexample.com/channels">https://gobyexample.com/channels</a></li>
+<li><a href="https://tour.golang.org/concurrency/2">https://tour.golang.org/concurrency/2</a></li>
+<li><a href="https://golang.org/ref/spec#Select_statements">https://golang.org/ref/spec#Select_statements</a></li>
+<li><a href="https://github.com/a8m/go-lang-cheat-sheet">https://github.com/a8m/go-lang-cheat-sheet</a></li>
+<li><a href="http://devs.cloudimmunity.com/gotchas-and-common-mistakes-in-go-golang/">http://devs.cloudimmunity.com/gotchas-and-common-mistakes-in-go-golang/</a></li>
+<li><a href="http://guzalexander.com/2013/12/06/golang-channels-tutorial.html">http://guzalexander.com/2013/12/06/golang-channels-tutorial.html</a></li>
+</ul>
+]]></content></item><item><title>幂等设计</title><link>https://zzde.me/posts/idempotent-design/</link><pubDate>Sun, 07 Oct 2018 01:18:31 +0800</pubDate><guid>https://zzde.me/posts/idempotent-design/</guid><description>我们实际系统中有很多操作，是不管做多少次，都应该产生一样的效果或返回一样的结果。 例如前端重复提交选中的数据，应该后台只产生对应这个数据的一个</description><content type="html"><![CDATA[<blockquote>
+<p>我们实际系统中有很多操作，是不管做多少次，都应该产生一样的效果或返回一样的结果。</p>
+</blockquote>
+<ul>
+<li>例如前端重复提交选中的数据，应该后台只产生对应这个数据的一个反应结果；</li>
+<li>我们发起一笔付款请求，应该只扣用户账户一次钱，</li>
+<li>当遇到网络重发或系统bug重发，也应该只扣一次钱；</li>
+<li>发送消息，也应该只发一次创建业务订单，一次业务请求只能创建一个，创建多个就会出大问题等等很多重要的情况都需要幂等的特性来支持。</li>
+</ul>
+<h3 id="幂等性概念">幂等性概念</h3>
+<p>幂等（idempotent、idempotence）是一个数学与计算机学概念，常见于抽象代数中。 在编程中一个幂等操作的特点是其任意多次执行所产生的影响均与一次执行的影响相同。幂等函数，或幂等方法，是指可以使用相同参数重复执行，并能获得相同结果的函数。这些函数不会影响系统状态，也不用担心重复执行会对系统造成改变。例如，“getUsername()和setTrue()”函数就是一个幂等函数. 更复杂的操作幂等保证是利用唯一交易号(流水号)实现。幂等就是一个操作，不论执行多少次，产生的效果和返回的结果都是一样的。</p>
+<h3 id="幂等方案设计">幂等方案设计</h3>
+<p>有些操作是天然幂等的，譬如查询操作、删除操作。其他一些插入和更新操作有时候需要引入其他的机制来保证幂等，比如乐观锁、悲观锁等。这里介绍两种常用的来保证幂等的方案：利用数据库唯一索引和通过token机制来实现幂等。</p>
+<h4 id="利用数据库来实现幂等">利用数据库来实现幂等</h4>
+<p>利用数据库的一些特性来实现幂等设计，可以将一些复杂的加锁解锁操作转移到数据库来处理。这样可以大大减少编码的成本。
+这里用来创建唯一索引的数据必须保证是唯一的，不可出现业务上允许的重复。</p>
+<h4 id="token机制">token机制</h4>
+<p>token机制方式重复提交token机制防止页面重复提交。由于网络或者重复点击的问题，可能会有重复的请求发送到服务器。利用token方式可以防止重复提交。</p>
+<ul>
+<li>数据提交之前要想服务器申请token</li>
+<li>token放到redis或者tair提交后后台检验token，（检验token使用删除校验，删除成功即有效，因为查询在校验在并发中是很危险的）</li>
+<li>同时更新token状态进行逻辑处理</li>
+</ul>
+<p>thx</p>
+]]></content></item><item><title>关于 SSH 端口转发</title><link>https://zzde.me/posts/ssh-port-forwarding/</link><pubDate>Wed, 12 Sep 2018 23:23:59 +0800</pubDate><guid>https://zzde.me/posts/ssh-port-forwarding/</guid><description>&lt;p>SSH有三种端口转发模式&lt;/p>
+&lt;ul>
+&lt;li>本地端口转发(Local Port Forwarding)&lt;/li>
+&lt;li>远程端口转发(Remote Port Forwarding)&lt;/li>
+&lt;li>动态端口转发(Dynamic Port Forwarding)&lt;/li>
+&lt;/ul>
+&lt;p>对于本地/远程端口转发，两者的方向恰好相反。动态端口转发则可以用于科学上网。&lt;/p>
+&lt;p>SSH端口转发也被称作SSH隧道(SSH Tunnel)，因为它们都是通过SSH登陆之后，在SSH客户端与SSH服务端之间建立了一个隧道，从而进行通信。SSH隧道是非常安全的，因为SSH是通过加密传输数据的(SSH全称为Secure Shell)。&lt;/p>
+&lt;p>常见的用途就是在管理远程数据库时，开启远程登陆是非常不安全的。所以通过隧道将其端口转发到本地（例如：mysql 的3306，redis的 6379）&lt;/p></description><content type="html"><![CDATA[<p>SSH有三种端口转发模式</p>
+<ul>
+<li>本地端口转发(Local Port Forwarding)</li>
+<li>远程端口转发(Remote Port Forwarding)</li>
+<li>动态端口转发(Dynamic Port Forwarding)</li>
+</ul>
+<p>对于本地/远程端口转发，两者的方向恰好相反。动态端口转发则可以用于科学上网。</p>
+<p>SSH端口转发也被称作SSH隧道(SSH Tunnel)，因为它们都是通过SSH登陆之后，在SSH客户端与SSH服务端之间建立了一个隧道，从而进行通信。SSH隧道是非常安全的，因为SSH是通过加密传输数据的(SSH全称为Secure Shell)。</p>
+<p>常见的用途就是在管理远程数据库时，开启远程登陆是非常不安全的。所以通过隧道将其端口转发到本地（例如：mysql 的3306，redis的 6379）</p>
+<h3 id="本地端口转发">本地端口转发</h3>
+<p>所谓本地端口转发，就是将发送到<strong>本地端口</strong>的请求，转发到<strong>目标端口</strong>。这样，就可以通过访问本地端口，来访问目标端口的服务。
+使用-L属性，就可以指定需要转发的端口，语法是这样的:</p>
+<div class="highlight"><pre class="chroma"><code class="language-fallback" data-lang="fallback">ssh [-L 本地地址:本地端口:远程地址:远程端口] [user@]hostname [command]
+</code></pre></div><p>通过本地端口转发，可以将发送到<strong>本地主机</strong>端口的请求，转发到<strong>远程云主机</strong>的某个端口请求。</p>
+<p>例如一个远程主机的python代码, 服务端本地开放5000端口</p>
+<p><img src="https://ww1.sinaimg.cn/large/005YhI8igy1fv76rpaqdvj311w0skn18" alt=""></p>
+<p>我们通过以下命令来实现本地访问</p>
+<div class="highlight"><pre class="chroma"><code class="language-fallback" data-lang="fallback">ssh -L 5000:localhost:5000 root@xxxxx
+</code></pre></div><p><img src="https://ww1.sinaimg.cn/large/005YhI8igy1fv76wiys5lj31760asdiv" alt=""></p>
+<p>另外，-L选项中的目标地址也可以是其他主机的地址。</p>
+<h3 id="远程端口转发">远程端口转发</h3>
+<p>所谓远程端口转发，就是将发送到<strong>远程端口</strong>的请求，转发到<strong>目标端口</strong>。这样，就可以通过访问远程端口，来访问目标端口的服务。
+使用-R属性，就可以指定需要转发的端口，语法是这样的:</p>
+<div class="highlight"><pre class="chroma"><code class="language-fallback" data-lang="fallback">ssh [-R 远程地址:远程端口:本地地址:本地端口:] [user@]hostname [command]
+</code></pre></div><p>应用场景：
+本地主机A1运行了一个服务，端口为3000，远程云主机B1需要访问这个服务。</p>
+<p>本次示例就是将上面的倒过来即可，即远程做访问，本地做服务</p>
+<p><img src="https://ww1.sinaimg.cn/large/005YhI8igy1fv77522huuj311208iq4x" alt=""></p>
+<h3 id="动态端口转发">动态端口转发</h3>
+<p>对于<strong>本地端口转发</strong>和<strong>远程端口转发</strong>，都存在两个一一对应的端口，分别位于SSH的客户端和服务端，而动态端口转发则只是绑定了一个本地端口，而<strong>目标地址:目标端口</strong>则是不固定的。<strong>目标地址:目标端口</strong>是由<strong>发起的请求</strong>决定的，
+比如，请求地址为192.168.1.100:3000，则通过SSH转发的请求地址也是192.168.1.100:3000。
+常常用于科学上网，代理上网等</p>
+<p>语法：</p>
+<div class="highlight"><pre class="chroma"><code class="language-fallback" data-lang="fallback">ssh [-D 本地地址:本地端口] [user@]hostname [command]
+</code></pre></div><p>这时，通过<strong>动态端口转发</strong>，可以将在本地主机发起的请求，转发到远程主机，而由远程主机去真正地发起请求。</p>
+<p>例如将本地代理设置为：
+<img src="https://ww1.sinaimg.cn/large/005YhI8igy1fv840hv9irj317c11idnf" alt=""></p>
+<p>之后执行命令</p>
+<div class="highlight"><pre class="chroma"><code class="language-fallback" data-lang="fallback">ssh -D localhost:1088 root@xxx
+</code></pre></div><p>这是本地的所有的网络请求到将转发到1088端口上之后有ssh通过云主机转发到真正的请求地址，如果你的云主机可以访问外网的话，完全可以达到科学上网的目的。</p>
+<h3 id="参考链接">参考链接</h3>
+<ul>
+<li>
+<p><a href="https://help.ubuntu.com/community/SSH/OpenSSH/PortForwarding?highlight=%28%28SSH%7COpenSSH%7CPortForwarding%29%29">SSH/OpenSSH/PortForwarding</a></p>
+</li>
+<li>
+<p><a href="http://www.pchou.info/linux/2015/11/01/ssh-tunnel.html">SSH隧道翻墙的原理和实现</a></p>
+</li>
+</ul>]]></content></item><item><title>使用travis-ci自动部署hexo博客</title><link>https://zzde.me/posts/auto-deploy-hexo-blog-with-traivs-ci/</link><pubDate>Thu, 02 Aug 2018 12:03:23 +0800</pubDate><guid>https://zzde.me/posts/auto-deploy-hexo-blog-with-traivs-ci/</guid><description>最近研究了Traivs-ci，发现持续集成真是一个不错的东西，写好脚本之后，帮我省了一堆事。 现在用它来帮我持续集成我的hexo博客，现在我只</description><content type="html"><![CDATA[<p>最近研究了Traivs-ci，发现持续集成真是一个不错的东西，写好脚本之后，帮我省了一堆事。
+现在用它来帮我持续集成我的hexo博客，现在我只需有将新的md文件push到github上，
+travis会帮我处理好之后的事。</p>
+<p>以下是我们将要实现之后写新博客的步骤也是我们要达到的目的：</p>
+<ul>
+<li>更新博客文章内容后 commit 到 GitHub repo</li>
+<li>Travis CI 自动编译生成出新的静态博客文件</li>
+<li>自动部署至 GitHub Pages</li>
+</ul>
+<h2 id="前期准备">前期准备</h2>
+<ul>
+<li>创建 <code>github repo</code>，本文以 <a href="https://github.com/zxh326/zxh326.github.io">zxh326.github.io</a> 为例
+在你本地博客目录执行以下操作</li>
+</ul>
+<div class="highlight"><pre class="chroma"><code class="language-sh" data-lang="sh"><span class="c1"># 以下操作将会在你的仓库新建一个source防止专门来存放hexo代码，</span>
+<span class="c1"># 建议不要将主题一起提交，或者将主题作为git submoudle来管理</span>
+# 
+git init
+git remote add origin git@github.com:zxh326/zxh326.github.io.git
+git checkout --orphan <span class="nb">source</span>
+git add .
+git commit -m <span class="s2">&#34;Initial commit&#34;</span>
+git push origin source:source
+</code></pre></div><ul>
+<li>注册 <code>travis-ci</code>，并将你的仓库添加至<code>travis-ci</code>，<a href="https://travis-ci.org/">travis-ci</a></li>
+</ul>
+<h2 id="生成部署专用密钥--写配置文件">生成部署专用密钥 &amp; 写配置文件</h2>
+<p>我们有两种方法使<code>travis-ci</code>有操作我们仓库的权限</p>
+<ul>
+<li>
+<p>申请一个GitHub的 Personal access tokens，配合 Travis 的环境变量配置就可以拿到 push 权限了</p>
+</li>
+<li>
+<p>利用travis-ci生成加密的专用部署密钥</p>
+</li>
+</ul>
+<p>简单的说下区别:
+第一种 申请的 <code>token</code>默认是可以操作仓库里所有仓库的，包括私有仓库，<code>github</code>可以以很方便的对<code>token</code>进行权限管理，
+你可以选择明文放在travis与项目相关的环境变量或者通过官方工具加密此token。</p>
+<p>第二种 是生成一对ssh密钥对，之后利用<code>travis</code> 利用 <code>openssl aes-256-cbc</code> 加密。
+如果你另<code>同时部署到vps</code>的话使用这种。</p>
+<h3 id="第一种使用github提供的personal-access-tokens">第一种：使用github提供的Personal access tokens</h3>
+<p>前往<a href="https://github.com/settings/tokens/new">github token</a>申请
+注意做好权限管理</p>
+<p>第二种的使用方法，第一种直接申请token，放到traivs的环境变量即可，跳过这步</p>
+<ul>
+<li>首先，新生成一个 ssh 密钥对（不要嫌麻烦直接把你机器上的秘钥拿去用了，太危险）：</li>
+</ul>
+<div class="highlight"><pre class="chroma"><code class="language-shell" data-lang="shell"><span class="c1"># 随便生成在哪都行，文件名也随意</span>
+ssh-keygen -f travis.key
+</code></pre></div><ul>
+<li>安装travis的工具</li>
+</ul>
+<div class="highlight"><pre class="chroma"><code class="language-shell" data-lang="shell"><span class="c1"># 需要有Ruby环境，mac自带，windows的话。。。。。据说加密会失败，没试过。</span>
+<span class="c1"># 可以试试用windwos的wsl linux 子系统</span>
+sudo gem install travis
+</code></pre></div><ul>
+<li>然后通过命令行登录 Travis 并加密文件：</li>
+</ul>
+<div class="highlight"><pre class="chroma"><code class="language-shell" data-lang="shell"><span class="c1"># 交互式操作，使用 GitHub 账号密码登录</span>
+<span class="c1"># 如果是私有项目要加个 --pro 参数</span>
+<span class="c1"># 加密完成后会在当前目录下生成一个 travis.key.enc 文件</span>
+<span class="c1"># 会在你的 .travis.yml 文件里自动加上用于解密的 shell 语句（重要）</span>
+travis login --auto
+
+travis encrypt-file travis.key -add
+</code></pre></div><p>⚠️ 确保 <strong>travis.key</strong> <strong>没有上传</strong>至仓库，
+⚠️ 确保仓库有travis.key.enc文件，这个文件放哪都成，我是专门建了个文件夹<code>.travis</code>用来存放这些文件</p>
+<h2 id="写配置文件">写配置文件</h2>
+<p>编辑<code>.travis.yml</code>文件
+我在这里贴出我的配置文件</p>
+<div class="highlight"><pre class="chroma"><code class="language-yml" data-lang="yml">language<span class="p">:</span><span class="w"> </span>node_js<span class="w">
+</span><span class="w"></span>node_js<span class="p">:</span><span class="w"> </span>stable<span class="w">
+</span><span class="w">
+</span><span class="w"></span><span class="c"># 只监听 source 分支的改动</span><span class="w">
+</span><span class="w"></span>branches<span class="p">:</span><span class="w">
+</span><span class="w">  </span>only<span class="p">:</span><span class="w">
+</span><span class="w">  </span>-<span class="w"> </span>source<span class="w">
+</span><span class="w">
+</span><span class="w"></span><span class="c"># 缓存依赖，节省持续集成时间</span><span class="w">
+</span><span class="w"></span>cache<span class="p">:</span><span class="w">
+</span><span class="w">  </span>yarn<span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w">
+</span><span class="w">  </span>directories<span class="p">:</span><span class="w">
+</span><span class="w">    </span>-<span class="w"> </span>node_modules<span class="w">
+</span><span class="w">    </span>-<span class="w"> </span>themes<span class="w">
+</span><span class="w">
+</span><span class="w"></span>before_install<span class="p">:</span><span class="w">
+</span><span class="w"></span><span class="c"># 解密 RSA 私钥并设置为本机 ssh 私钥，注意travis.key.enc的目录要和你的目录一样</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>openssl<span class="w"> </span>aes<span class="m">-256</span>-cbc<span class="w"> </span>-K<span class="w"> </span>$encrypted_c626fb518bf5_key<span class="w"> </span>-iv<span class="w"> </span>$encrypted_c626fb518bf5_iv<span class="w"> </span>-in<span class="w"> </span>.travis/travis.key.enc<span class="w"> </span>-out<span class="w"> </span>~/.ssh/id_rsa<span class="w"> </span>-d<span class="w">
+</span><span class="w"></span>-<span class="w"> </span>chmod<span class="w"> </span><span class="m">600</span><span class="w"> </span>~/.ssh/id_rsa<span class="w">
+</span><span class="w"></span><span class="c"># 修改本机 ssh 配置，防止秘钥认证过程影响自动部署</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>user.name<span class="w"> </span><span class="s2">&#34;zzde&#34;</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>git<span class="w"> </span>config<span class="w"> </span>--global<span class="w"> </span>user.email<span class="w"> </span><span class="s2">&#34;zhangxh1997@gmail.com&#34;</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>yarn<span class="w"> </span>global<span class="w"> </span>add<span class="w"> </span>hexo-cli<span class="w">
+</span><span class="w"></span><span class="c"># 赋予自动部署脚本可执行权限</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>chmod<span class="w"> </span>+x<span class="w"> </span>.travis/deploy.sh<span class="w">
+</span><span class="w">
+</span><span class="w"></span>install<span class="p">:</span><span class="w">
+</span><span class="w"></span><span class="c"># 安装 Hexo 及其依赖</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>yarn<span class="w">
+</span><span class="w"></span>-<span class="w"> </span>yarn<span class="w"> </span>add<span class="w"> </span>hexo-generator-feed<span class="w">
+</span><span class="w"></span><span class="c"># 当 Travis 文件缓存不存在时，从 Gitee 私有仓库 clone 主题，改为你使用的主题地址</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>if<span class="w"> </span><span class="p">[</span><span class="w"> </span>!<span class="w"> </span>-d<span class="w"> </span><span class="s2">&#34;themes/seventeen&#34;</span><span class="w"> </span><span class="p">]</span>;<span class="w"> </span>then<span class="w"> </span>git<span class="w"> </span>clone<span class="w"> </span>git@gitee.com<span class="p">:</span>zxh326/hexo-theme-seventeen.git<span class="w"> </span>themes/seventeen;<span class="w"> </span>fi<span class="w">
+</span><span class="w"></span><span class="c"># - git clone https://github.com/zxh326/hexo-theme-icarus.git themes/icarus</span><span class="w">
+</span><span class="w">
+</span><span class="w"></span>script<span class="p">:</span><span class="w">
+</span><span class="w"></span><span class="c"># 生成静态页面</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>hexo<span class="w"> </span>clean<span class="w">
+</span><span class="w"></span>-<span class="w"> </span>hexo<span class="w"> </span>generate<span class="w">
+</span><span class="w">
+</span><span class="w"></span>after_success<span class="p">:</span><span class="w">
+</span><span class="w"></span><span class="c"># 部署到 GitHub Pages</span><span class="w">
+</span><span class="w"></span><span class="c"># 我把这一部分的操作直接分离到另外的脚本里去了</span><span class="w">
+</span><span class="w"></span>-<span class="w"> </span>.travis/deploy.sh<span class="w">
+</span><span class="w">
+</span><span class="w"></span><span class="c"># 将github添加的信任里</span><span class="w">
+</span><span class="w"></span>addons<span class="p">:</span><span class="w">
+</span><span class="w">  </span>ssh_known_hosts<span class="p">:</span><span class="w">
+</span><span class="w">  </span>-<span class="w"> </span>github.com<span class="w">
+</span><span class="w">  </span>-<span class="w"> </span>gitee.com<span class="w">
+</span><span class="w">
+</span></code></pre></div><p>写部署文件 deploy.sh</p>
+<div class="highlight"><pre class="chroma"><code class="language-shell" data-lang="shell"><span class="cp">#!/bin/bash
+</span><span class="cp"></span><span class="nb">set</span> -ev
+<span class="nb">export</span> <span class="nv">TZ</span><span class="o">=</span><span class="s1">&#39;Asia/Shanghai&#39;</span>
+
+<span class="c1"># 先 clone 再 commit，避免直接 force commit</span>
+<span class="c1"># 不然整个 branch 就总是只有一个 commit，不好看</span>
+git clone -b master git@github.com:zxh326/zxh326.github.io.git .deploy_git
+
+<span class="nb">cd</span> .deploy_git
+git checkout master
+mv .git/ ../public/
+<span class="nb">cd</span> ../public
+
+git add .
+git commit -m <span class="s2">&#34;Site updated: `date +&#34;</span>%Y-%m-%d %H:%M:%S<span class="s2">&#34;`&#34;</span>
+
+git push origin master:master --force --quiet
+
+</code></pre></div><h2 id="提交试试">提交试试</h2>
+<p>将所有的改动提交至github，注意确保仓库有master分支</p>
+<p><a href="https://gist.github.com/zxh326/421407e3e14d78a618d69462244bbdfc.js">Gist</a></p>
+<!-- raw HTML omitted -->
+]]></content></item><item><title>ArchLinux安装与配置</title><link>https://zzde.me/posts/how-to-install-arch-and-config/</link><pubDate>Sat, 20 May 2017 21:03:59 +0800</pubDate><guid>https://zzde.me/posts/how-to-install-arch-and-config/</guid><description>A simple, lightweight distribution 一个简单，轻便的Linux操作系统， Archlinux有一个强大的wiki，本文依据官方wiki编写 如有不当之处，请指出！ 准备和磁盘</description><content type="html"><![CDATA[<blockquote>
+<p>A simple, lightweight distribution
+一个简单，轻便的Linux操作系统，
+Archlinux有一个强大的wiki，本文依据<a href="https://wiki.archlinux.org/">官方wiki</a>编写
+如有不当之处，请指出！</p>
+</blockquote>
+<h1 id="准备和磁盘分区">准备和磁盘分区</h1>
+<h2 id="准备">准备</h2>
+<ul>
+<li>硬件
+<ul>
+<li>一个大于等于4GB的U盘</li>
+<li>电脑（很明显）</li>
+</ul>
+</li>
+</ul>
+<!-- raw HTML omitted -->
+<ul>
+<li>软件
+<ul>
+<li><a href="https://www.archlinux.org/download/">Arch linux ISO</a>镜像</li>
+<li>如果你对速度有要求的话强烈建议从国内源下载
+<ul>
+<li><a href="http://mirrors.163.com/archlinux/iso/">清华大学源 TUNA</a></li>
+<li><a href="https://mirrors.ustc.edu.cn/archlinux/iso/">中国科学技术大学 USTC</a></li>
+<li><a href="https://mirrors.neusoft.edu.cn/archlinux/iso/">大连东软 Neusoft</a></li>
+<li><a href="https://www.archlinux.org/mirrorlist/?country=CN&amp;protocol=http&amp;protocol=https&amp;ip_version=4">这里有所有China源</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="制作启动u盘">制作启动U盘</h2>
+<ul>
+<li>在Windows下制作可启动U盘
+<ul>
+<li><a href="https://rufus.akeo.ie">Rufus</a></li>
+<li>用法这里不多说</li>
+</ul>
+</li>
+<li>在类Unix环境下制作可启动U盘
+<ul>
+<li>使用底层dd命令
+<ul>
+<li>Linux :
+<ul>
+<li><code>lsblk</code>命令列出磁盘</li>
+</ul>
+</li>
+<li>Mac下
+<ul>
+<li><code>diskutil list</code>命令</li>
+</ul>
+</li>
+</ul>
+</li>
+<li>之后执行
+<ul>
+<li><code>sudo dd if=/path_to_arch_.iso of=/dev/sdX</code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h2 id="在bios中启动efi模式">在BIOS中启动EFI模式</h2>
+<p>在<strong>BIOS</strong>里找到<strong>UEFI/EFI mode</strong>并且选中即可。有些BIOS可能有什么<strong>Fast boot和safe mode</strong>什么的，需要把这两个给<strong>disable</strong></p>
+<h2 id="在u盘中启动">在U盘中启动</h2>
+<p>在启动的时候选择从<strong>U盘中</strong>启动
+普通笔记本一般都是F2,F10,F12之类的</p>
+<h2 id="检查互联网连接">检查互联网连接</h2>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">    ping -c <span class="m">3</span> www.baidu.com
+</code></pre></div><p>如果出现</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">$ ping -c <span class="m">3</span> www.baidu.com
+PING baidu.com <span class="o">(</span>123.125.114.144<span class="o">)</span> 56<span class="o">(</span>84<span class="o">)</span> bytes of data.
+<span class="m">64</span> bytes from 123.125.114.144 <span class="o">(</span>123.125.114.144<span class="o">)</span>: <span class="nv">icmp_seq</span><span class="o">=</span><span class="m">1</span> <span class="nv">ttl</span><span class="o">=</span><span class="m">57</span> <span class="nv">time</span><span class="o">=</span>5.19 ms
+<span class="m">64</span> bytes from 123.125.114.144 <span class="o">(</span>123.125.114.144<span class="o">)</span>: <span class="nv">icmp_seq</span><span class="o">=</span><span class="m">2</span> <span class="nv">ttl</span><span class="o">=</span><span class="m">57</span> <span class="nv">time</span><span class="o">=</span>5.22 ms
+<span class="m">64</span> bytes from 123.125.114.144 <span class="o">(</span>123.125.114.144<span class="o">)</span>: <span class="nv">icmp_seq</span><span class="o">=</span><span class="m">3</span> <span class="nv">ttl</span><span class="o">=</span><span class="m">57</span> <span class="nv">time</span><span class="o">=</span>5.22 ms
+
+--- baidu.com ping statistics ---
+<span class="m">3</span> packets transmitted, <span class="m">3</span> received, 0% packet loss, <span class="nb">time</span> 2002ms
+rtt min/avg/max/mdev <span class="o">=</span> 5.196/5.215/5.227/0.060 ms
+</code></pre></div><p>Success !
+如果出现</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">$ ping -c <span class="m">3</span> www.baidu.com
+ping: cannot resolve www.baidu.com: Unknown host
+</code></pre></div><p>那么就说明你没有网络。</p>
+<p>如果你没有网络的话，检查有没有叉网线。如果没有网线的话，输入<code>wifi-menu -o</code>以连接<code>Wi-Fi</code>。</p>
+<h2 id="检查是否启动efi模式">检查是否启动EFI模式</h2>
+<p>输入</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">efivar -l
+</code></pre></div><p>如果出现一大堆东西，那么就说明你在使用<code>UEFI</code>模式。</p>
+<h2 id="磁盘分区">磁盘分区</h2>
+<ul>
+<li>找到所有磁盘
+<ul>
+<li>输入命令<code>lsblk</code>。可能会出现<code>/dev/sda，/dev/sdb，/dev/sdc</code>什么的。找到你要安装<code>Linux</code>的磁盘。本文一下将使用<code>/dev/sdX</code>作为例子，请根据<strong>实际需要</strong>做出<strong>适当更改</strong>。</li>
+</ul>
+</li>
+<li>清除已存在分区
+<ul>
+<li>输入<code>gdisk /dev/sdX</code>然后依次输入<code>x，z，y</code>和<code>y</code>。请务必小心，这个命令会把<code>/dev/sdX</code><strong>整个磁盘</strong>给<strong>抹掉</strong>。<strong>啪啪啪啪～</strong></li>
+</ul>
+</li>
+</ul>
+<h3 id="创建分区">创建分区</h3>
+<ul>
+<li>输入命令<code>cgdisk /dev/sdX</code>。会出现<code>Any key to continue</code>（随便摁个键继续）字样。</li>
+</ul>
+<h4 id="创建boot分区">创建boot分区</h4>
+<blockquote>
+<p>找到<code>free space</code>然后把光标移动到**[New]**然后回车</p>
+</blockquote>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">First Sector:                       <span class="c1"># 直接回车</span>
+Size in sectors: 100MiB             <span class="c1"># 回车</span>
+Hex Code: EF00                      <span class="c1"># 回车</span>
+Enter new partition name: boot      <span class="c1"># 回车</span>
+</code></pre></div><h4 id="创建swap分区">创建Swap分区</h4>
+<blockquote>
+<p>找到free space然后把光标移动到**[New]**然后回车。本文以2GiB大小的swap分区为例子。请根据实际情况自行调整。</p>
+</blockquote>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">First Sector:                       <span class="c1"># 直接回车</span>
+Size in sectors:                    <span class="c1"># 回车</span>
+Hex Code: <span class="m">8200</span>                      <span class="c1"># 回车</span>
+Enter new partition name: swap      <span class="c1"># 回车</span>
+</code></pre></div><h4 id="创建root分区">创建root分区</h4>
+<blockquote>
+<p>找到free space然后把光标移动到**[New]**</p>
+</blockquote>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">First Sector:                       <span class="c1"># 直接回车</span>
+Size in sectors:                    <span class="c1"># 回车</span> 
+Hex Code:                           <span class="c1"># 回车</span> 
+Enter new partition name: root      <span class="c1"># 回车</span>                 
+</code></pre></div><p>之后把光标移动到**[Write]**回车再输入**yes**。最后，光标移动到**[Quit]**回车。</p>
+<h3 id="选择file-systems">选择file systems</h3>
+<blockquote>
+<p>本文使用ext4，根据实际情况可以<strong>酌情处理</strong>（切记<strong>不要</strong>直接复制我的<strong>回车</strong>）。 依次输入命令:</p>
+</blockquote>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">mkfs.fat -F32 /dev/sda1             <span class="c1"># 你的boot分区</span>
+mkswap /dev/sda2                    <span class="c1"># 你的swap分区</span>
+swapon /dev/sda2                    <span class="c1"># 同上</span>
+mkfs.ext4 /dev/sda3                 <span class="c1"># 你的root分区</span>
+</code></pre></div><p>现在最好重启计算机，输入reboot。</p>
+<h1 id="安装arch-linux并且让它能开机">安装Arch Linux并且让它能开机</h1>
+<h2 id="mounting-partitions">Mounting Partitions</h2>
+<p>输入:</p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">mount /dev/sda3 /mnt
+mkdir /mnt/boot
+mkdir /mnt/home                     <span class="c1"># 仅对创建Home分区的需要这一步</span>
+mount /dev/sda1 /mnt/boot
+</code></pre></div><p><strong>!如果你是在windows下安装Arch需要双系统的话 建议执行这一步</strong></p>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">mkdir /mnt/boot/efi
+mount /dev/你的windows引导分区 /mnt/efi
+</code></pre></div><h2 id="设置arch-repository-mirrorlist">设置Arch Repository Mirrorlist:</h2>
+<ul>
+<li>创建一个备份</li>
+</ul>
+<div class="highlight"><pre class="chroma"><code class="language-bash" data-lang="bash">cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.backup
+</code></pre></div><ul>
+<li>获取与你链接最快的源 两种方法
+<ul>
+<li>第一种将全世界所有源测速，来判断哪一个更适用你<strong>此方法较慢</strong>
+<code>rankmirrors -n 6 /etc/pacman.d/mirrorlist.backup &gt; /etc/pacman.d/mirrorlist</code></li>
+<li>第二种在<a href="https://www.archlinux.org/mirrorlist/">Arch wiki 官方</a>选定特定的国家</li>
+<li>第三种 自己在<code>/etc/pacman.d/mirrorlist</code>一直dd删除你不想要的源</li>
+</ul>
+</li>
+</ul>
+<h2 id="安装arch-base文件">安装Arch Base文件</h2>
+<p>输入 <code>pacstrap -i /mnt base base-devel</code>
+整个过程一直摁回车和y即可，速度依据你上一步选择的源的速度</p>
+<h2 id="生成fstab文件">生成Fstab文件</h2>
+<p>输入 <code>genfstab -U -p /mnt &gt;&gt; /mnt/etc/fstab</code></p>
+<p>查看 <code>fastab</code> 文件是否正确
+输入 <code>vim /mnt/etc/fstab</code>
+应该看到类似于</p>
+<div class="highlight"><pre class="chroma"><code class="language-fallback" data-lang="fallback">/dev/sda2 none swap defaults 0 0
+或者
+UUID=xxxxxxxxxxxxxxxxxxxxx none swap defaults 0 0
+</code></pre></div><p>如果是这样 保存退出即可，如果不是，检查安装有没有出错，重新来即可</p>
+<p>如果一切顺利的话就可以进入我们的新安装的系统啦
+<code>arch-chroot /mnt</code>
+嗯 到这里我们就成功一大截了。</p>
+<h2 id="本地化">本地化</h2>
+<ul>
+<li>语言
+<ul>
+<li>输入 <code>vim /etc/locale.gen</code></li>
+<li>找到 <code>en_US.UTF-8 UTF-8</code>,<code>zh_CN.UTF-8</code></li>
+<li>将其前面的<code>#</code>注释去掉保存即可</li>
+<li>现在输入<code>locale-gen</code>产生locale</li>
+<li>最后输入 <code>echo LANG=en_US.UTF-8 &gt; /etc/locale.conf</code></li>
+<li><code>export LANG=en_US.UTF-8</code></li>
+<li>语言化完成</li>
+</ul>
+</li>
+<li>时区
+<strong>本文以上海时区为例子</strong>
+<ul>
+<li><code>ln -s /usr/share/zoneinfo/Asia/Shanghai &gt; /etc/localtime</code></li>
+<li>设置硬件时钟
+<ul>
+<li><code>hwclock --systohc --utc</code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<blockquote>
+<p>TIPS
+如果双系统发现时钟与Linux时钟不一样，原因是windows默认时区问题
+这里不过多阐述
+可以修改注册表，让windows将硬件时钟当作标准时间
+　Reg add HKLM\SYSTEM\CurrentControlSet\Control\TimeZoneInformation /v RealTimeIsUniversal /t REG_DWORD /d 1
+也可以参考网上其他办法</p>
+</blockquote>
+]]></content></item><item><title>Hello World</title><link>https://zzde.me/posts/hello-world/</link><pubDate>Tue, 21 Mar 2017 00:00:00 +0800</pubDate><guid>https://zzde.me/posts/hello-world/</guid><description>Welcome to Hexo! This is your very first post. Check documentation for more info. If you get any problems when using Hexo, you can find the answer in troubleshooting or you can ask me on GitHub.
+Hello Hexo</description><content type="html"><![CDATA[<p>Welcome to <a href="https://hexo.io/">Hexo</a>! This is your very first post. Check <a href="https://hexo.io/docs/">documentation</a> for more info. If you get any problems when using Hexo, you can find the answer in <a href="https://hexo.io/docs/troubleshooting.html">troubleshooting</a> or you can ask me on <a href="https://github.com/hexojs/hexo/issues">GitHub</a>.</p>
+<h2 id="hello-hexo">Hello Hexo</h2>
+]]></content></item></channel></rss>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>架构 on Zzde's blog</title><link>https://zzde.me/tags/%E6%9E%B6%E6%9E%84/</link><description>Recent content in 架构 on Zzde's blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><lastBuildDate>Mon, 02 Dec 2019 12:34:17 +0800</lastBuildDate><atom:link href="https://zzde.me/tags/%E6%9E%B6%E6%9E%84/index.xml" rel="self" type="application/rss+xml"/><item><title>[转]反向代理层绝不能替代DNS轮询</title><link>https://zzde.me/posts/reverse-proxy-layer-must-not-replace-dns-polling/</link><pubDate>Mon, 02 Dec 2019 12:34:17 +0800</pubDate><guid>https://zzde.me/posts/reverse-proxy-layer-must-not-replace-dns-polling/</guid><description>&lt;p>原创： 58沈剑
+今天
+有朋友问我，DNS轮询是不是过时的技术了？有了反向代理层（Nginx、LVS、F5等），是不是就不需要DNS轮询了？
+然而，反向代理层绝不能替代DNS轮询！&lt;/p>
+&lt;h3 id="反向代理层有什么用架构实现时要注意什么">反向代理层有什么用？架构实现时要注意什么？&lt;/h3>
+&lt;ul>
+&lt;li>
+&lt;p>&lt;strong>作为服务端统一入口&lt;/strong>，屏蔽后端WEB集群细节，代表整个WEB集群；
+&lt;em>画外音：这就是为啥它叫反向代理&lt;/em>&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>保证WEB集群的扩展性&lt;/strong>，Nginx后端可随时加WEB实例；&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>实施负载均衡&lt;/strong>，反向代理层会将请求均匀分发给后端WEB集群的每一个实例；&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>保证WEB集群的高可用&lt;/strong>，任何一个WEB实例挂了，服务都不受影响；&lt;/p>
+&lt;/li>
+&lt;li>
+&lt;p>&lt;strong>注意自身高可用&lt;/strong>，防止一台Nginx挂了，服务端统一入口受影响；&lt;/p>
+&lt;/li>
+&lt;/ul></description></item></channel></rss>

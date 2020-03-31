@@ -1,0 +1,322 @@
+<!doctype html><html lang=en-us><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv=x-ua-compatible content="ie=edge"><meta name=theme-color content="#494f5c"><meta name=msapplication-TileColor content="#494f5c"><meta itemprop=name content="如何优雅的关闭go Channel"><meta itemprop=description content="本文译自：How To Close Channels in Golang Elegantly。 几天前，我写了一篇文章来说明golang中channel的使用规范。在reddit和HN，那篇"><meta itemprop=datePublished content="2019-03-13T20:33:59+08:00"><meta itemprop=dateModified content="2019-03-13T20:33:59+08:00"><meta itemprop=wordCount content="3466"><meta itemprop=keywords content="Go,"><meta property="og:title" content="如何优雅的关闭go Channel"><meta property="og:description" content="本文译自：How To Close Channels in Golang Elegantly。 几天前，我写了一篇文章来说明golang中channel的使用规范。在reddit和HN，那篇"><meta property="og:type" content="article"><meta property="og:url" content="https://zzde.me/posts/how-to-close-channels-in-golang-elegantly/"><meta property="article:published_time" content="2019-03-13T20:33:59+08:00"><meta property="article:modified_time" content="2019-03-13T20:33:59+08:00"><meta name=twitter:card content="summary"><meta name=twitter:title content="如何优雅的关闭go Channel"><meta name=twitter:description content="本文译自：How To Close Channels in Golang Elegantly。 几天前，我写了一篇文章来说明golang中channel的使用规范。在reddit和HN，那篇"><link rel=apple-touch-icon sizes=180x180 href=/apple-touch-icon.png><link rel=icon type=image/png sizes=32x32 href=/favicon-32x32.png><link rel=icon type=image/png sizes=16x16 href=/favicon-16x16.png><link rel=manifest href=/site.webmanifest><link rel=mask-icon href=/safari-pinned-tab.svg color><link rel="shortcut icon" href=/favicon.ico><title>如何优雅的关闭go Channel</title><link rel=stylesheet href=https://zzde.me/css/style.min.657bcb7af31123e4156b1a3d2ff60a636717e54ead74f882136b5114cf72b55e.css integrity="sha256-ZXvLevMRI+QVaxo9L/YKY2cX5U6tdPiCE2tRFM9ytV4=" crossorigin=anonymous><link rel=stylesheet href=https://zzde.me/css/custom.scss><link rel=stylesheet href=https://zzde.me/css/style.scss></head><body id=page><header id=site-header class="animated slideInUp faster"><div class="hdr-wrapper section-inner"><div class=hdr-left><div class=site-branding><a href=https://zzde.me/>Zzde's blog</a></div><nav class="site-nav hide-in-mobile"><a href=https://zzde.me/posts/>Posts</a>
+<a href=https://zzde.me/about-hugo/>About</a></nav></div><div class="hdr-right hdr-icons"><button id=toc-btn class="hdr-btn desktop-only-ib" title="Table of Contents"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-list"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3" y2="6"/><line x1="3" y1="12" x2="3" y2="12"/><line x1="3" y1="18" x2="3" y2="18"/></svg></button><span class="hdr-social hide-in-mobile"><a href=https://twitter.com/m_zzde target=_blank rel="noopener me" title=Twitter><svg xmlns="http://www.w3.org/2000/svg" class="feather" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9.0 01-3.14 1.53 4.48 4.48.0 00-7.86 3v1A10.66 10.66.0 013 4s-4 9 5 13a11.64 11.64.0 01-7 2c9 5 20 0 20-11.5a4.5 4.5.0 00-.08-.83A7.72 7.72.0 0023 3z"/></svg></a><a href=https://instagram.com/zzde.me target=_blank rel="noopener me" title=Instagram><svg xmlns="http://www.w3.org/2000/svg" class="feather" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1112.63 8 4 4 0 0116 11.37z"/><line x1="17.5" y1="6.5" x2="17.5" y2="6.5"/></svg></a><a href=https://github.com/zxh326 target=_blank rel="noopener me" title=Github><svg xmlns="http://www.w3.org/2000/svg" class="feather" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37.0 00-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44.0 0020 4.77 5.07 5.07.0 0019.91 1S18.73.65 16 2.48a13.38 13.38.0 00-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07.0 005 4.77a5.44 5.44.0 00-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37.0 009 18.13V22"/></svg></a></span><button id=menu-btn class=hdr-btn title=Menu><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-menu"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg></button></div></div></header><div id=mobile-menu class="animated fast"><ul><li><a href=https://zzde.me/posts/>Posts</a></li><li><a href=https://zzde.me/about-hugo/>About</a></li></ul></div><main class="site-main section-inner animated fadeIn faster"><article class=thin><header class=post-header><div class=post-meta><span>Mar 13, 2019</span></div><h1>如何优雅的关闭go Channel</h1></header><div class=content><p>本文译自：<a href=http://www.tapirgames.com/blog/golang-channel-closing>How To Close Channels in Golang Elegantly</a>。</p><p>几天前，我写了一篇文章来说明golang中channel的使用规范。在reddit和HN，那篇文章收到了很多赞同，但是我也收到了下面几个关于Go channel设计和规范的批评：</p><p>在不能更改channel状态的情况下，没有简单普遍的方式来检查channel是否已经关闭了
+关闭已经关闭的channel会导致panic，所以在closer(关闭者)不知道channel是否已经关闭的情况下去关闭channel是很危险的
+发送值到已经关闭的channel会导致panic，所以如果sender(发送者)在不知道channel是否已经关闭的情况下去向channel发送值是很危险的</p><p>那些批评看起来都很有道理（实际上并没有）。是的，没有一个内置函数可以检查一个channel是否已经关闭。如果你能确定不会向channel发送任何值，那么也确实需要一个简单的方法来检查channel是否已经关闭：</p><div class=highlight><pre class=chroma><code class=language-go data-lang=go><span class=kn>package</span> <span class=nx>main</span>
+
+<span class=kn>import</span> <span class=s>&#34;fmt&#34;</span>
+
+<span class=kd>type</span> <span class=nx>T</span> <span class=kt>int</span>
+
+<span class=kd>func</span> <span class=nf>IsClosed</span><span class=p>(</span><span class=nx>ch</span> <span class=o>&lt;-</span><span class=kd>chan</span> <span class=nx>T</span><span class=p>)</span> <span class=kt>bool</span> <span class=p>{</span>
+    <span class=k>select</span> <span class=p>{</span>
+    <span class=k>case</span> <span class=o>&lt;-</span><span class=nx>ch</span><span class=p>:</span>
+        <span class=k>return</span> <span class=kc>true</span>
+    <span class=k>default</span><span class=p>:</span>
+    <span class=p>}</span>
+    
+    <span class=k>return</span> <span class=kc>false</span>
+<span class=p>}</span>
+
+<span class=kd>func</span> <span class=nf>main</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+    <span class=nx>c</span> <span class=o>:=</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=nx>T</span><span class=p>)</span>
+    <span class=nx>fmt</span><span class=p>.</span><span class=nf>Println</span><span class=p>(</span><span class=nf>IsClosed</span><span class=p>(</span><span class=nx>c</span><span class=p>)</span><span class=p>)</span> <span class=c1>// false
+</span><span class=c1></span>    <span class=nb>close</span><span class=p>(</span><span class=nx>c</span><span class=p>)</span>
+    <span class=nx>fmt</span><span class=p>.</span><span class=nf>Println</span><span class=p>(</span><span class=nf>IsClosed</span><span class=p>(</span><span class=nx>c</span><span class=p>)</span><span class=p>)</span> <span class=c1>// true
+</span><span class=c1></span><span class=p>}</span>
+</code></pre></div><p>上面已经提到了，没有一种适用的方式来检查channel是否已经关闭了。但是，就算有一个简单的 <code>closed(chan T)</code> bool函数来检查channel是否已经关闭，它的用处还是很有限的，就像内置的len函数用来检查缓冲channel中元素数量一样。原因就在于，已经检查过的channel的状态有可能在调用了类似的方法返回之后就修改了，因此返回来的值已经不能够反映刚才检查的channel的当前状态了。</p><p>尽管在调用closed(ch)返回true的情况下停止向channel发送值是可以的，但是如果调用closed(ch)返回false，那么关闭channel或者继续向channel发送值就不安全了（会panic）。</p><h3 id=the-channel-closing-principle>The Channel Closing Principle<a href=#the-channel-closing-principle class=anchor aria-hidden=true><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3"/><line x1="8" y1="12" x2="16" y2="12"/></svg></a></h3><p>在使用Go channel的时候，一个适用的原则是不要从接收端关闭channel，也不要关闭有多个并发发送者的channel。换句话说，如果sender(发送者)只是唯一的sender或者是channel最后一个活跃的sender，那么你应该在sender的goroutine关闭channel，从而通知receiver(s)(接收者们)已经没有值可以读了。维持这条原则将保证永远不会发生向一个已经关闭的channel发送值或者关闭一个已经关闭的channel。</p><p>（下面，我们将会称上面的原则为** channel closing principle**</p><h3 id=打破channel-closing-principle的解决方案>打破channel closing principle的解决方案<a href=#打破channel-closing-principle的解决方案 class=anchor aria-hidden=true><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3"/><line x1="8" y1="12" x2="16" y2="12"/></svg></a></h3><p>如果你因为某种原因从接收端（receiver side）关闭channel或者在多个发送者中的一个关闭channel，那么你应该使用列在Golang panic/recover Use Cases的函数来安全地发送值到channel中（假设channel的元素类型是T）</p><div class=highlight><pre class=chroma><code class=language-go data-lang=go><span class=kd>func</span> <span class=nf>SafeSend</span><span class=p>(</span><span class=nx>ch</span> <span class=kd>chan</span> <span class=nx>T</span><span class=p>,</span> <span class=nx>value</span> <span class=nx>T</span><span class=p>)</span> <span class=p>(</span><span class=nx>closed</span> <span class=kt>bool</span><span class=p>)</span> <span class=p>{</span>
+    <span class=k>defer</span> <span class=kd>func</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+        <span class=k>if</span> <span class=nb>recover</span><span class=p>(</span><span class=p>)</span> <span class=o>!=</span> <span class=kc>nil</span> <span class=p>{</span>
+            <span class=c1>// the return result can be altered 
+</span><span class=c1></span>            <span class=c1>// in a defer function call
+</span><span class=c1></span>            <span class=nx>closed</span> <span class=p>=</span> <span class=kc>true</span>
+        <span class=p>}</span>
+    <span class=p>}</span><span class=p>(</span><span class=p>)</span>
+    
+    <span class=nx>ch</span> <span class=o>&lt;-</span> <span class=nx>value</span> <span class=c1>// panic if ch is closed
+</span><span class=c1></span>    <span class=k>return</span> <span class=kc>false</span> <span class=c1>// &lt;=&gt; closed = false; return
+</span><span class=c1></span><span class=p>}</span>
+</code></pre></div><p>如果channel ch没有被关闭的话，那么这个函数的性能将和ch &lt;- value接近。对于channel关闭的时候，SafeSend函数只会在每个sender goroutine中调用一次，因此程序不会有太大的性能损失。</p><p>同样的想法也可以用在从多个goroutine关闭channel中：</p><div class=highlight><pre class=chroma><code class=language-go data-lang=go><span class=kd>func</span> <span class=nf>SafeClose</span><span class=p>(</span><span class=nx>ch</span> <span class=kd>chan</span> <span class=nx>T</span><span class=p>)</span> <span class=p>(</span><span class=nx>justClosed</span> <span class=kt>bool</span><span class=p>)</span> <span class=p>{</span>
+    <span class=k>defer</span> <span class=kd>func</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+        <span class=k>if</span> <span class=nb>recover</span><span class=p>(</span><span class=p>)</span> <span class=o>!=</span> <span class=kc>nil</span> <span class=p>{</span>
+            <span class=nx>justClosed</span> <span class=p>=</span> <span class=kc>false</span>
+        <span class=p>}</span>
+    <span class=p>}</span><span class=p>(</span><span class=p>)</span>
+    
+    <span class=c1>// assume ch != nil here.
+</span><span class=c1></span>    <span class=nb>close</span><span class=p>(</span><span class=nx>ch</span><span class=p>)</span> <span class=c1>// panic if ch is closed
+</span><span class=c1></span>    <span class=k>return</span> <span class=kc>true</span>
+<span class=p>}</span>
+</code></pre></div><p>很多人喜欢用sync.Once来关闭channel：</p><div class=highlight><pre class=chroma><code class=language-go data-lang=go><span class=kd>type</span> <span class=nx>MyChannel</span> <span class=kd>struct</span> <span class=p>{</span>
+    <span class=nx>C</span>    <span class=kd>chan</span> <span class=nx>T</span>
+    <span class=nx>once</span> <span class=nx>sync</span><span class=p>.</span><span class=nx>Once</span>
+<span class=p>}</span>
+
+<span class=kd>func</span> <span class=nf>NewMyChannel</span><span class=p>(</span><span class=p>)</span> <span class=o>*</span><span class=nx>MyChannel</span> <span class=p>{</span>
+    <span class=k>return</span> <span class=o>&amp;</span><span class=nx>MyChannel</span><span class=p>{</span><span class=nx>C</span><span class=p>:</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=nx>T</span><span class=p>)</span><span class=p>}</span>
+<span class=p>}</span>
+
+<span class=kd>func</span> <span class=p>(</span><span class=nx>mc</span> <span class=o>*</span><span class=nx>MyChannel</span><span class=p>)</span> <span class=nf>SafeClose</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+    <span class=nx>mc</span><span class=p>.</span><span class=nx>once</span><span class=p>.</span><span class=nf>Do</span><span class=p>(</span><span class=kd>func</span><span class=p>(</span><span class=p>)</span><span class=p>{</span>
+        <span class=nb>close</span><span class=p>(</span><span class=nx>mc</span><span class=p>.</span><span class=nx>C</span><span class=p>)</span>
+    <span class=p>}</span><span class=p>)</span>
+<span class=p>}</span>
+</code></pre></div><p>当然了，我们也可以用sync.Mutex来避免多次关闭channel：</p><div class=highlight><pre class=chroma><code class=language-go data-lang=go><span class=kd>type</span> <span class=nx>MyChannel</span> <span class=kd>struct</span> <span class=p>{</span>
+    <span class=nx>C</span>      <span class=kd>chan</span> <span class=nx>T</span>
+    <span class=nx>closed</span> <span class=kt>bool</span>
+    <span class=nx>mutex</span>  <span class=nx>sync</span><span class=p>.</span><span class=nx>Mutex</span>
+<span class=p>}</span>
+
+<span class=kd>func</span> <span class=nf>NewMyChannel</span><span class=p>(</span><span class=p>)</span> <span class=o>*</span><span class=nx>MyChannel</span> <span class=p>{</span>
+    <span class=k>return</span> <span class=o>&amp;</span><span class=nx>MyChannel</span><span class=p>{</span><span class=nx>C</span><span class=p>:</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=nx>T</span><span class=p>)</span><span class=p>}</span>
+<span class=p>}</span>
+
+<span class=kd>func</span> <span class=p>(</span><span class=nx>mc</span> <span class=o>*</span><span class=nx>MyChannel</span><span class=p>)</span> <span class=nf>SafeClose</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+    <span class=nx>mc</span><span class=p>.</span><span class=nx>mutex</span><span class=p>.</span><span class=nf>Lock</span><span class=p>(</span><span class=p>)</span>
+    <span class=k>if</span> <span class=p>!</span><span class=nx>mc</span><span class=p>.</span><span class=nx>closed</span> <span class=p>{</span>
+        <span class=nb>close</span><span class=p>(</span><span class=nx>mc</span><span class=p>.</span><span class=nx>C</span><span class=p>)</span>
+        <span class=nx>mc</span><span class=p>.</span><span class=nx>closed</span> <span class=p>=</span> <span class=kc>true</span>
+    <span class=p>}</span>
+    <span class=nx>mc</span><span class=p>.</span><span class=nx>mutex</span><span class=p>.</span><span class=nf>Unlock</span><span class=p>(</span><span class=p>)</span>
+<span class=p>}</span>
+
+<span class=kd>func</span> <span class=p>(</span><span class=nx>mc</span> <span class=o>*</span><span class=nx>MyChannel</span><span class=p>)</span> <span class=nf>IsClosed</span><span class=p>(</span><span class=p>)</span> <span class=kt>bool</span> <span class=p>{</span>
+    <span class=nx>mc</span><span class=p>.</span><span class=nx>mutex</span><span class=p>.</span><span class=nf>Lock</span><span class=p>(</span><span class=p>)</span>
+    <span class=k>defer</span> <span class=nx>mc</span><span class=p>.</span><span class=nx>mutex</span><span class=p>.</span><span class=nf>Unlock</span><span class=p>(</span><span class=p>)</span>
+    <span class=k>return</span> <span class=nx>mc</span><span class=p>.</span><span class=nx>closed</span>
+<span class=p>}</span>
+</code></pre></div><p>我们应该要理解为什么Go不支持内置SafeSend和SafeClose函数，原因就在于并不推荐从接收端或者多个并发发送端关闭channel。Golang甚至禁止关闭只接收（receive-only）的channel。</p><h3 id=保持-channel-closing-principle-的优雅方案>保持 channel closing principle 的优雅方案<a href=#保持-channel-closing-principle-的优雅方案 class=anchor aria-hidden=true><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3"/><line x1="8" y1="12" x2="16" y2="12"/></svg></a></h3><p>上面的SaveSend函数有一个缺点是，在select语句的case关键字后不能作为发送操作被调用（译者注：类似于 case SafeSend(ch, t):）。另外一个缺点是，很多人，包括我自己都觉得上面通过使用panic/recover和sync包的方案不够优雅。针对各种场景，下面介绍不用使用panic/recover和sync包，纯粹是利用channel的解决方案。
+（在下面的例子总，sync.WaitGroup只是用来让例子完整的。它的使用在实践中不一定一直都有用）</p><p>M个receivers，一个sender，sender通过关闭data channel说“不再发送”
+这是最简单的场景了，就只是当sender不想再发送的时候让sender关闭data 来关闭channel：</p><div class=highlight><pre class=chroma><code class=language-go data-lang=go><span class=kn>package</span> <span class=nx>main</span>
+
+<span class=kn>import</span> <span class=p>(</span>
+    <span class=s>&#34;time&#34;</span>
+    <span class=s>&#34;math/rand&#34;</span>
+    <span class=s>&#34;sync&#34;</span>
+    <span class=s>&#34;log&#34;</span>
+<span class=p>)</span>
+
+<span class=kd>func</span> <span class=nf>main</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+    <span class=nx>rand</span><span class=p>.</span><span class=nf>Seed</span><span class=p>(</span><span class=nx>time</span><span class=p>.</span><span class=nf>Now</span><span class=p>(</span><span class=p>)</span><span class=p>.</span><span class=nf>UnixNano</span><span class=p>(</span><span class=p>)</span><span class=p>)</span>
+    <span class=nx>log</span><span class=p>.</span><span class=nf>SetFlags</span><span class=p>(</span><span class=mi>0</span><span class=p>)</span>
+    
+    <span class=c1>// ...
+</span><span class=c1></span>    <span class=kd>const</span> <span class=nx>MaxRandomNumber</span> <span class=p>=</span> <span class=mi>100000</span>
+    <span class=kd>const</span> <span class=nx>NumReceivers</span> <span class=p>=</span> <span class=mi>100</span>
+    
+    <span class=nx>wgReceivers</span> <span class=o>:=</span> <span class=nx>sync</span><span class=p>.</span><span class=nx>WaitGroup</span><span class=p>{</span><span class=p>}</span>
+    <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Add</span><span class=p>(</span><span class=nx>NumReceivers</span><span class=p>)</span>
+    
+    <span class=c1>// ...
+</span><span class=c1></span>    <span class=nx>dataCh</span> <span class=o>:=</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=kt>int</span><span class=p>,</span> <span class=mi>100</span><span class=p>)</span>
+    
+    <span class=c1>// the sender
+</span><span class=c1></span>    <span class=k>go</span> <span class=kd>func</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+        <span class=k>for</span> <span class=p>{</span>
+            <span class=k>if</span> <span class=nx>value</span> <span class=o>:=</span> <span class=nx>rand</span><span class=p>.</span><span class=nf>Intn</span><span class=p>(</span><span class=nx>MaxRandomNumber</span><span class=p>)</span><span class=p>;</span> <span class=nx>value</span> <span class=o>==</span> <span class=mi>0</span> <span class=p>{</span>
+                <span class=c1>// the only sender can close the channel safely.
+</span><span class=c1></span>                <span class=nb>close</span><span class=p>(</span><span class=nx>dataCh</span><span class=p>)</span>
+                <span class=k>return</span>
+            <span class=p>}</span> <span class=k>else</span> <span class=p>{</span>            
+                <span class=nx>dataCh</span> <span class=o>&lt;-</span> <span class=nx>value</span>
+            <span class=p>}</span>
+        <span class=p>}</span>
+    <span class=p>}</span><span class=p>(</span><span class=p>)</span>
+    
+    <span class=c1>// receivers
+</span><span class=c1></span>    <span class=k>for</span> <span class=nx>i</span> <span class=o>:=</span> <span class=mi>0</span><span class=p>;</span> <span class=nx>i</span> <span class=p>&lt;</span> <span class=nx>NumReceivers</span><span class=p>;</span> <span class=nx>i</span><span class=o>++</span> <span class=p>{</span>
+        <span class=k>go</span> <span class=kd>func</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+            <span class=k>defer</span> <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Done</span><span class=p>(</span><span class=p>)</span>
+            
+            <span class=c1>// receive values until dataCh is closed and
+</span><span class=c1></span>            <span class=c1>// the value buffer queue of dataCh is empty.
+</span><span class=c1></span>            <span class=k>for</span> <span class=nx>value</span> <span class=o>:=</span> <span class=k>range</span> <span class=nx>dataCh</span> <span class=p>{</span>
+                <span class=nx>log</span><span class=p>.</span><span class=nf>Println</span><span class=p>(</span><span class=nx>value</span><span class=p>)</span>
+            <span class=p>}</span>
+        <span class=p>}</span><span class=p>(</span><span class=p>)</span>
+    <span class=p>}</span>
+    
+    <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Wait</span><span class=p>(</span><span class=p>)</span>
+<span class=p>}</span>
+</code></pre></div><p>一个receiver，N个sender，receiver通过关闭一个额外的signal channel说“请停止发送”
+这种场景比上一个要复杂一点。我们不能让receiver关闭data channel，因为这么做将会打** 破channel closing principle**。但是我们可以让receiver关闭一个额外的signal channel来通知sender停止发送值：</p><div class=highlight><pre class=chroma><code class=language-go data-lang=go><span class=kn>package</span> <span class=nx>main</span>
+
+<span class=kn>import</span> <span class=p>(</span>
+    <span class=s>&#34;time&#34;</span>
+    <span class=s>&#34;math/rand&#34;</span>
+    <span class=s>&#34;sync&#34;</span>
+    <span class=s>&#34;log&#34;</span>
+<span class=p>)</span>
+
+<span class=kd>func</span> <span class=nf>main</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+    <span class=nx>rand</span><span class=p>.</span><span class=nf>Seed</span><span class=p>(</span><span class=nx>time</span><span class=p>.</span><span class=nf>Now</span><span class=p>(</span><span class=p>)</span><span class=p>.</span><span class=nf>UnixNano</span><span class=p>(</span><span class=p>)</span><span class=p>)</span>
+    <span class=nx>log</span><span class=p>.</span><span class=nf>SetFlags</span><span class=p>(</span><span class=mi>0</span><span class=p>)</span>
+    
+    <span class=c1>// ...
+</span><span class=c1></span>    <span class=kd>const</span> <span class=nx>MaxRandomNumber</span> <span class=p>=</span> <span class=mi>100000</span>
+    <span class=kd>const</span> <span class=nx>NumSenders</span> <span class=p>=</span> <span class=mi>1000</span>
+    
+    <span class=nx>wgReceivers</span> <span class=o>:=</span> <span class=nx>sync</span><span class=p>.</span><span class=nx>WaitGroup</span><span class=p>{</span><span class=p>}</span>
+    <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Add</span><span class=p>(</span><span class=mi>1</span><span class=p>)</span>
+    
+    <span class=c1>// ...
+</span><span class=c1></span>    <span class=nx>dataCh</span> <span class=o>:=</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=kt>int</span><span class=p>,</span> <span class=mi>100</span><span class=p>)</span>
+    <span class=nx>stopCh</span> <span class=o>:=</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=kd>struct</span><span class=p>{</span><span class=p>}</span><span class=p>)</span>
+        <span class=c1>// stopCh is an additional signal channel.
+</span><span class=c1></span>        <span class=c1>// Its sender is the receiver of channel dataCh.
+</span><span class=c1></span>        <span class=c1>// Its reveivers are the senders of channel dataCh.
+</span><span class=c1></span>    
+    <span class=c1>// senders
+</span><span class=c1></span>    <span class=k>for</span> <span class=nx>i</span> <span class=o>:=</span> <span class=mi>0</span><span class=p>;</span> <span class=nx>i</span> <span class=p>&lt;</span> <span class=nx>NumSenders</span><span class=p>;</span> <span class=nx>i</span><span class=o>++</span> <span class=p>{</span>
+        <span class=k>go</span> <span class=kd>func</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+            <span class=k>for</span> <span class=p>{</span>
+                <span class=nx>value</span> <span class=o>:=</span> <span class=nx>rand</span><span class=p>.</span><span class=nf>Intn</span><span class=p>(</span><span class=nx>MaxRandomNumber</span><span class=p>)</span>
+                
+                <span class=k>select</span> <span class=p>{</span>
+                <span class=k>case</span> <span class=o>&lt;-</span> <span class=nx>stopCh</span><span class=p>:</span>
+                    <span class=k>return</span>
+                <span class=k>case</span> <span class=nx>dataCh</span> <span class=o>&lt;-</span> <span class=nx>value</span><span class=p>:</span>
+                <span class=p>}</span>
+            <span class=p>}</span>
+        <span class=p>}</span><span class=p>(</span><span class=p>)</span>
+    <span class=p>}</span>
+    
+    <span class=c1>// the receiver
+</span><span class=c1></span>    <span class=k>go</span> <span class=kd>func</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+        <span class=k>defer</span> <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Done</span><span class=p>(</span><span class=p>)</span>
+        
+        <span class=k>for</span> <span class=nx>value</span> <span class=o>:=</span> <span class=k>range</span> <span class=nx>dataCh</span> <span class=p>{</span>
+            <span class=k>if</span> <span class=nx>value</span> <span class=o>==</span> <span class=nx>MaxRandomNumber</span><span class=o>-</span><span class=mi>1</span> <span class=p>{</span>
+                <span class=c1>// the receiver of the dataCh channel is
+</span><span class=c1></span>                <span class=c1>// also the sender of the stopCh cahnnel.
+</span><span class=c1></span>                <span class=c1>// It is safe to close the stop channel here.
+</span><span class=c1></span>                <span class=nb>close</span><span class=p>(</span><span class=nx>stopCh</span><span class=p>)</span>
+                <span class=k>return</span>
+            <span class=p>}</span>
+            
+            <span class=nx>log</span><span class=p>.</span><span class=nf>Println</span><span class=p>(</span><span class=nx>value</span><span class=p>)</span>
+        <span class=p>}</span>
+    <span class=p>}</span><span class=p>(</span><span class=p>)</span>
+    
+    <span class=c1>// ...
+</span><span class=c1></span>    <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Wait</span><span class=p>(</span><span class=p>)</span>
+<span class=p>}</span>
+</code></pre></div><p>正如注释说的，对于额外的signal channel来说，它的sender是data channel的receiver。这个额外的signal channel被它唯一的sender关闭，遵守了** channel closing principle**。</p><p>M个receiver，N个sender，它们当中任意一个通过通知一个moderator（仲裁者）关闭额外的signal channel来说“让我们结束游戏吧”
+这是最复杂的场景了。我们不能让任意的receivers和senders关闭data channel，也不能让任何一个receivers通过关闭一个额外的signal channel来通知所有的senders和receivers退出游戏。这么做的话会打破** channel closing principle**。但是，我们可以引入一个moderator来关闭一个额外的signal channel。这个例子的一个技巧是怎么通知moderator去关闭额外的signal channel：</p><div class=highlight><pre class=chroma><code class=language-go data-lang=go><span class=kn>package</span> <span class=nx>main</span>
+
+<span class=kn>import</span> <span class=p>(</span>
+    <span class=s>&#34;time&#34;</span>
+    <span class=s>&#34;math/rand&#34;</span>
+    <span class=s>&#34;sync&#34;</span>
+    <span class=s>&#34;log&#34;</span>
+    <span class=s>&#34;strconv&#34;</span>
+<span class=p>)</span>
+
+<span class=kd>func</span> <span class=nf>main</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+    <span class=nx>rand</span><span class=p>.</span><span class=nf>Seed</span><span class=p>(</span><span class=nx>time</span><span class=p>.</span><span class=nf>Now</span><span class=p>(</span><span class=p>)</span><span class=p>.</span><span class=nf>UnixNano</span><span class=p>(</span><span class=p>)</span><span class=p>)</span>
+    <span class=nx>log</span><span class=p>.</span><span class=nf>SetFlags</span><span class=p>(</span><span class=mi>0</span><span class=p>)</span>
+    
+    <span class=c1>// ...
+</span><span class=c1></span>    <span class=kd>const</span> <span class=nx>MaxRandomNumber</span> <span class=p>=</span> <span class=mi>100000</span>
+    <span class=kd>const</span> <span class=nx>NumReceivers</span> <span class=p>=</span> <span class=mi>10</span>
+    <span class=kd>const</span> <span class=nx>NumSenders</span> <span class=p>=</span> <span class=mi>1000</span>
+    
+    <span class=nx>wgReceivers</span> <span class=o>:=</span> <span class=nx>sync</span><span class=p>.</span><span class=nx>WaitGroup</span><span class=p>{</span><span class=p>}</span>
+    <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Add</span><span class=p>(</span><span class=nx>NumReceivers</span><span class=p>)</span>
+    
+    <span class=c1>// ...
+</span><span class=c1></span>    <span class=nx>dataCh</span> <span class=o>:=</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=kt>int</span><span class=p>,</span> <span class=mi>100</span><span class=p>)</span>
+    <span class=nx>stopCh</span> <span class=o>:=</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=kd>struct</span><span class=p>{</span><span class=p>}</span><span class=p>)</span>
+        <span class=c1>// stopCh is an additional signal channel.
+</span><span class=c1></span>        <span class=c1>// Its sender is the moderator goroutine shown below.
+</span><span class=c1></span>        <span class=c1>// Its reveivers are all senders and receivers of dataCh.
+</span><span class=c1></span>    <span class=nx>toStop</span> <span class=o>:=</span> <span class=nb>make</span><span class=p>(</span><span class=kd>chan</span> <span class=kt>string</span><span class=p>,</span> <span class=mi>1</span><span class=p>)</span>
+        <span class=c1>// the channel toStop is used to notify the moderator
+</span><span class=c1></span>        <span class=c1>// to close the additional signal channel (stopCh).
+</span><span class=c1></span>        <span class=c1>// Its senders are any senders and receivers of dataCh.
+</span><span class=c1></span>        <span class=c1>// Its reveiver is the moderator goroutine shown below.
+</span><span class=c1></span>    
+    <span class=kd>var</span> <span class=nx>stoppedBy</span> <span class=kt>string</span>
+    
+    <span class=c1>// moderator
+</span><span class=c1></span>    <span class=k>go</span> <span class=kd>func</span><span class=p>(</span><span class=p>)</span> <span class=p>{</span>
+        <span class=nx>stoppedBy</span> <span class=p>=</span> <span class=o>&lt;-</span> <span class=nx>toStop</span> <span class=c1>// part of the trick used to notify the moderator
+</span><span class=c1></span>                              <span class=c1>// to close the additional signal channel.
+</span><span class=c1></span>        <span class=nb>close</span><span class=p>(</span><span class=nx>stopCh</span><span class=p>)</span>
+    <span class=p>}</span><span class=p>(</span><span class=p>)</span>
+    
+    <span class=c1>// senders
+</span><span class=c1></span>    <span class=k>for</span> <span class=nx>i</span> <span class=o>:=</span> <span class=mi>0</span><span class=p>;</span> <span class=nx>i</span> <span class=p>&lt;</span> <span class=nx>NumSenders</span><span class=p>;</span> <span class=nx>i</span><span class=o>++</span> <span class=p>{</span>
+        <span class=k>go</span> <span class=kd>func</span><span class=p>(</span><span class=nx>id</span> <span class=kt>string</span><span class=p>)</span> <span class=p>{</span>
+            <span class=k>for</span> <span class=p>{</span>
+                <span class=nx>value</span> <span class=o>:=</span> <span class=nx>rand</span><span class=p>.</span><span class=nf>Intn</span><span class=p>(</span><span class=nx>MaxRandomNumber</span><span class=p>)</span>
+                <span class=k>if</span> <span class=nx>value</span> <span class=o>==</span> <span class=mi>0</span> <span class=p>{</span>
+                    <span class=c1>// here, a trick is used to notify the moderator
+</span><span class=c1></span>                    <span class=c1>// to close the additional signal channel.
+</span><span class=c1></span>                    <span class=k>select</span> <span class=p>{</span>
+                    <span class=k>case</span> <span class=nx>toStop</span> <span class=o>&lt;-</span> <span class=s>&#34;sender#&#34;</span> <span class=o>+</span> <span class=nx>id</span><span class=p>:</span>
+                    <span class=k>default</span><span class=p>:</span>
+                    <span class=p>}</span>
+                    <span class=k>return</span>
+                <span class=p>}</span>
+                
+                <span class=c1>// the first select here is to try to exit the
+</span><span class=c1></span>                <span class=c1>// goroutine as early as possible.
+</span><span class=c1></span>                <span class=k>select</span> <span class=p>{</span>
+                <span class=k>case</span> <span class=o>&lt;-</span> <span class=nx>stopCh</span><span class=p>:</span>
+                    <span class=k>return</span>
+                <span class=k>default</span><span class=p>:</span>
+                <span class=p>}</span>
+                
+                <span class=k>select</span> <span class=p>{</span>
+                <span class=k>case</span> <span class=o>&lt;-</span> <span class=nx>stopCh</span><span class=p>:</span>
+                    <span class=k>return</span>
+                <span class=k>case</span> <span class=nx>dataCh</span> <span class=o>&lt;-</span> <span class=nx>value</span><span class=p>:</span>
+                <span class=p>}</span>
+            <span class=p>}</span>
+        <span class=p>}</span><span class=p>(</span><span class=nx>strconv</span><span class=p>.</span><span class=nf>Itoa</span><span class=p>(</span><span class=nx>i</span><span class=p>)</span><span class=p>)</span>
+    <span class=p>}</span>
+    
+    <span class=c1>// receivers
+</span><span class=c1></span>    <span class=k>for</span> <span class=nx>i</span> <span class=o>:=</span> <span class=mi>0</span><span class=p>;</span> <span class=nx>i</span> <span class=p>&lt;</span> <span class=nx>NumReceivers</span><span class=p>;</span> <span class=nx>i</span><span class=o>++</span> <span class=p>{</span>
+        <span class=k>go</span> <span class=kd>func</span><span class=p>(</span><span class=nx>id</span> <span class=kt>string</span><span class=p>)</span> <span class=p>{</span>
+            <span class=k>defer</span> <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Done</span><span class=p>(</span><span class=p>)</span>
+            
+            <span class=k>for</span> <span class=p>{</span>
+                <span class=c1>// same as senders, the first select here is to 
+</span><span class=c1></span>                <span class=c1>// try to exit the goroutine as early as possible.
+</span><span class=c1></span>                <span class=k>select</span> <span class=p>{</span>
+                <span class=k>case</span> <span class=o>&lt;-</span> <span class=nx>stopCh</span><span class=p>:</span>
+                    <span class=k>return</span>
+                <span class=k>default</span><span class=p>:</span>
+                <span class=p>}</span>
+                
+                <span class=k>select</span> <span class=p>{</span>
+                <span class=k>case</span> <span class=o>&lt;-</span> <span class=nx>stopCh</span><span class=p>:</span>
+                    <span class=k>return</span>
+                <span class=k>case</span> <span class=nx>value</span> <span class=o>:=</span> <span class=o>&lt;-</span><span class=nx>dataCh</span><span class=p>:</span>
+                    <span class=k>if</span> <span class=nx>value</span> <span class=o>==</span> <span class=nx>MaxRandomNumber</span><span class=o>-</span><span class=mi>1</span> <span class=p>{</span>
+                        <span class=c1>// the same trick is used to notify the moderator 
+</span><span class=c1></span>                        <span class=c1>// to close the additional signal channel.
+</span><span class=c1></span>                        <span class=k>select</span> <span class=p>{</span>
+                        <span class=k>case</span> <span class=nx>toStop</span> <span class=o>&lt;-</span> <span class=s>&#34;receiver#&#34;</span> <span class=o>+</span> <span class=nx>id</span><span class=p>:</span>
+                        <span class=k>default</span><span class=p>:</span>
+                        <span class=p>}</span>
+                        <span class=k>return</span>
+                    <span class=p>}</span>
+                    
+                    <span class=nx>log</span><span class=p>.</span><span class=nf>Println</span><span class=p>(</span><span class=nx>value</span><span class=p>)</span>
+                <span class=p>}</span>
+            <span class=p>}</span>
+        <span class=p>}</span><span class=p>(</span><span class=nx>strconv</span><span class=p>.</span><span class=nf>Itoa</span><span class=p>(</span><span class=nx>i</span><span class=p>)</span><span class=p>)</span>
+    <span class=p>}</span>
+    
+    <span class=c1>// ...
+</span><span class=c1></span>    <span class=nx>wgReceivers</span><span class=p>.</span><span class=nf>Wait</span><span class=p>(</span><span class=p>)</span>
+    <span class=nx>log</span><span class=p>.</span><span class=nf>Println</span><span class=p>(</span><span class=s>&#34;stopped by&#34;</span><span class=p>,</span> <span class=nx>stoppedBy</span><span class=p>)</span>
+<span class=p>}</span>
+</code></pre></div><p>在这个例子中，仍然遵守着** channel closing principle**。
+请注意channel toStop的缓冲大小是1.这是为了避免当mederator goroutine 准备好之前第一个通知就已经发送了，导致丢失。</p><h3 id=更多的场景>更多的场景？<a href=#更多的场景 class=anchor aria-hidden=true><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3"/><line x1="8" y1="12" x2="16" y2="12"/></svg></a></h3><p>很多的场景变体是基于上面三种的。举个例子，一个基于最复杂情况的变体可能要求receivers读取buffer channel中剩下所有的值。这应该很容易处理，所有这篇文章也就不提了。
+尽管上面三种场景不能覆盖所有Go channel的使用场景，但它们是最基础的，实践中的大多数场景都可以分类到那三种中。</p><h3 id=结论>结论<a href=#结论 class=anchor aria-hidden=true><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 7h3a5 5 0 015 5 5 5 0 01-5 5h-3m-6 0H6a5 5 0 01-5-5 5 5 0 015-5h3"/><line x1="8" y1="12" x2="16" y2="12"/></svg></a></h3><p>这里没有一种场景要求你去打破** channel closing principle**。如果你遇到了这种场景，请思考一下你的设计并重写你的代码。
+用Go编程就像在创作艺术。</p><p>thx</p></div><hr class=post-end><footer class=post-info><p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-tag meta-icon"><path d="M20.59 13.41l-7.17 7.17a2 2 0 01-2.83.0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z"/><line x1="7" y1="7" x2="7" y2="7"/></svg><span class=tag><a href=https://zzde.me/tags/go>Go</a></span></p><p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-file-text"><path d="M14 2H6A2 2 0 004 4v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>3466 Words</p><p><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-calendar"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>2019-03-13 12:33</p></footer></article><aside id=toc><div class=toc-title>Table of Contents</div><nav id=TableOfContents><ul><li><ul><li><a href=#the-channel-closing-principle>The Channel Closing Principle</a></li><li><a href=#打破channel-closing-principle的解决方案>打破channel closing principle的解决方案</a></li><li><a href=#保持-channel-closing-principle-的优雅方案>保持 channel closing principle 的优雅方案</a></li><li><a href=#更多的场景>更多的场景？</a></li><li><a href=#结论>结论</a></li></ul></li></ul></nav></aside><div class="post-nav thin"><a class=next-post href=https://zzde.me/posts/reverse-proxy-layer-must-not-replace-dns-polling/><span class=post-nav-label><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-left"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>&nbsp;Newer</span><br><span>[转]反向代理层绝不能替代DNS轮询</span></a>
+<a class=prev-post href=https://zzde.me/posts/go-channel-detail/><span class=post-nav-label>Older&nbsp;<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-arrow-right"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg></span><br><span>Go中的channel详解</span></a></div><div id=comments class=thin><div id=disqus_thread></div><script type=application/javascript>var disqus_config=function(){};(function(){if(["localhost","127.0.0.1"].indexOf(window.location.hostname)!=-1){document.getElementById('disqus_thread').innerHTML='Disqus comments not available by default when the website is previewed locally.';return;}
+var d=document,s=d.createElement('script');s.async=true;s.src='//'+"zzde"+'.disqus.com/embed.js';s.setAttribute('data-timestamp',+new Date());(d.head||d.body).appendChild(s);})();</script><noscript>Please enable JavaScript to view the <a href=https://disqus.com/?ref_noscript>comments powered by Disqus.</a></noscript><a href=https://disqus.com class=dsq-brlink>comments powered by <span class=logo-disqus>Disqus</span></a></div></main><footer id=site-footer class="section-inner thin animated fadeIn faster"><p>&copy; 2020 <a href=https://zzde.me/></a>&#183; <a href=https://creativecommons.org/licenses/by-nc/4.0/ target=_blank rel=noopener>CC BY-NC 4.0</a></p><p>Made with <a href=https://gohugo.io/ target=_blank rel=noopener>Hugo</a> &#183; Theme <a href=https://github.com/Track3/hermit target=_blank rel=noopener>Hermit</a> &#183; <a href=https://zzde.me/posts/index.xml target=_blank title=rss><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentcolor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-rss"><path d="M4 11a9 9 0 019 9"/><path d="M4 4a16 16 0 0116 16"/><circle cx="5" cy="19" r="1"/></svg></a></p></footer><script src=https://zzde.me/js/bundle.min.4a9a0ac3d2217822c7865b4161e6c2a71de1d70492264337755427898dd718f6.js integrity="sha256-SpoKw9IheCLHhltBYebCpx3h1wSSJkM3dVQniY3XGPY=" crossorigin=anonymous></script><script type=application/javascript>var doNotTrack=false;if(!doNotTrack){window.ga=window.ga||function(){(ga.q=ga.q||[]).push(arguments)};ga.l=+new Date;ga('create','UA-162352798-1','auto');ga('send','pageview');}</script><script async src=https://www.google-analytics.com/analytics.js></script></body></html>
